@@ -41,25 +41,30 @@
                 <% if (user.role==='USER' ) { %><input type="text" value="<%= plants[0]?.name || '' %>" disabled
                         class="form-input form-input-disabled"><input type="hidden" data-name="plantId"
                         value="<%= user.plantId %>">
-                    <% } else { %><select data-name="plantId" required class="form-input">
-                            <option value="">Select Plant</option>
-                            <% plants.forEach(plant=> { %><option value="<%= plant.id %>">
-                                    <%= plant.name %>
-                                </option>
-                                <% }) %>
-                        </select>
+                    <% } else { %>
+                        <div class="relative plant-search-wrapper">
+                            <input type="text" class="form-input plant-search-input" placeholder="Search plant..."
+                                autocomplete="off">
+                            <input type="hidden" data-name="plantId" class="selected-plant-id">
+                            <ul
+                                class="plant-search-results absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
+                            </ul>
+                        </div>
+
                         <% } %>
             </div>
             <div>
-                <label class="form-label">Item</label>
-                <select data-name="itemId" class="form-input item-select-template">
-                    <option value="">Select Item</option>
-                    <% items.forEach(item=> { %>
-                        <option value="<%= item.id %>">
-                            <%= item.item_code %> — <%= item.item_description %>
-                        </option>
-                        <% }) %>
-                </select>
+                <label class="form-label">Select Item</label>
+                <div class="relative item-search-wrapper">
+                    <input type="text" class="form-input item-search-input" placeholder="Search item..."
+                        autocomplete="off">
+                    <input type="hidden" data-name="itemId" class="selected-item-id">
+                    <ul
+                        class="item-search-results absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
+                    </ul>
+                </div>
+
+
 
             </div>
         </div>
@@ -85,4 +90,11 @@
         </div>
     </div>
 </template>
+<script id="item-list-json" type="application/json">
+    <%- JSON.stringify(items) %>
+</script>
+<script id="plant-list-json" type="application/json">
+  <%- JSON.stringify(plants) %>
+</script>
+
 <script src="/js/inventory-form.js"></script>

@@ -142,3 +142,27 @@
     /* Inherits from .form-input but with specific border changes */
     @apply rounded-l-none;
 }
+
+.item-search-results li {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+.item-search-results li:hover {
+    background-color: #f3f4f6; /* Tailwind gray-100 */
+}
+
+.item-search-results li {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+.item-search-results li:hover {
+    background-color: #f3f4f6;
+}
+
+.item-search-results li, .plant-search-results li {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+.item-search-results li:hover, .plant-search-results li:hover {
+    background-color: #f3f4f6;
+}

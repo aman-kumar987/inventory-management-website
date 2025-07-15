@@ -6,38 +6,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const addLineItemBtn = document.getElementById('add-line-item-btn');
     const template = document.getElementById('line-item-template');
 
-    // ✅ Merge: Define this once (inside)
-    const initializeTomSelect = (element) => {
-        if (!element || element.tomselect) return;
-        new TomSelect(element, {
-            create: false,
-            sortField: {
-                field: "text",
-                direction: "asc"
-            },
-            placeholder: "Search item..."
-        });
-    };
+    const items = JSON.parse(document.getElementById('item-list-json').textContent);
+    const plants = JSON.parse(document.getElementById('plant-list-json').textContent);
 
     const updateAllBlocks = () => {
         const allItemBlocks = lineItemsContainer.querySelectorAll('.line-item-block');
         allItemBlocks.forEach((itemBlock, itemIndex) => {
-            const numberSpan = itemBlock.querySelector('.item-number');
-            if (numberSpan) numberSpan.textContent = itemIndex + 1;
-
+            itemBlock.querySelector('.item-number').textContent = itemIndex + 1;
             itemBlock.querySelectorAll('[data-name]').forEach(input => {
                 const name = input.dataset.name;
                 input.name = `lineItems[${itemIndex}][${name}]`;
             });
-
-            const allCategoryBlocks = itemBlock.querySelectorAll('.quantity-block');
-            allCategoryBlocks.forEach((catBlock, catIndex) => {
+            itemBlock.querySelectorAll('.quantity-block').forEach((catBlock, catIndex) => {
                 catBlock.querySelectorAll('[data-cat-name]').forEach(catInput => {
                     const name = catInput.dataset.catName;
                     catInput.name = `lineItems[${itemIndex}][categories][${catIndex}][${name}]`;
                 });
             });
-
             const removeButton = itemBlock.querySelector('.remove-item-btn');
             if (removeButton) removeButton.classList.toggle('hidden', allItemBlocks.length <= 1);
         });
@@ -113,15 +98,73 @@ document.addEventListener('DOMContentLoaded', () => {
         updateButtons();
     };
 
+    const setupSearchDropdown = (wrapper, dataArray, inputClass, listClass, hiddenInputClass, valueKey, labelFn) => {
+        const input = wrapper.querySelector(inputClass);
+        const hiddenInput = wrapper.querySelector(hiddenInputClass);
+        const resultsList = wrapper.querySelector(listClass);
+
+        input.addEventListener('input', () => {
+            const search = input.value.trim().toLowerCase();
+            resultsList.innerHTML = '';
+
+            if (!search) {
+                resultsList.classList.add('hidden');
+                return;
+            }
+
+            const filtered = dataArray.filter(item =>
+                labelFn(item).toLowerCase().includes(search)
+            );
+
+            filtered.slice(0, 10).forEach(item => {
+                const li = document.createElement('li');
+                li.textContent = labelFn(item);
+                li.dataset.itemId = item[valueKey];
+                resultsList.appendChild(li);
+            });
+
+            resultsList.classList.remove('hidden');
+        });
+
+        resultsList.addEventListener('click', (e) => {
+            const li = e.target.closest('li');
+            if (!li) return;
+
+            input.value = li.textContent;
+            hiddenInput.value = li.dataset.itemId;
+            resultsList.classList.add('hidden');
+        });
+
+        input.addEventListener('blur', () => {
+            setTimeout(() => resultsList.classList.add('hidden'), 150);
+        });
+    };
+
     const addNewLineItem = () => {
         const newBlock = template.content.cloneNode(true);
         lineItemsContainer.appendChild(newBlock);
 
         const justAddedBlock = lineItemsContainer.lastElementChild;
 
-        // ✅ Apply TomSelect only here
-        const itemSelect = justAddedBlock.querySelector('.item-select-template');
-        initializeTomSelect(itemSelect);
+        setupSearchDropdown(
+            justAddedBlock.querySelector('.item-search-wrapper'),
+            items,
+            '.item-search-input',
+            '.item-search-results',
+            '.selected-item-id',
+            'id',
+            (item) => `${item.item_code} — ${item.item_description}`
+        );
+
+        setupSearchDropdown(
+            justAddedBlock.querySelector('.plant-search-wrapper'),
+            plants,
+            '.plant-search-input',
+            '.plant-search-results',
+            '.selected-plant-id',
+            'id',
+            (plant) => `${plant.name}`
+        );
 
         handleQuantityLogic(justAddedBlock.querySelector('.quantity-container'));
         updateAllBlocks();
