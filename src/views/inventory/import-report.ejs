@@ -1,0 +1,107 @@
+<div class="max-w-7xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">
+                <%= title %>
+            </h1>
+            <p class="text-gray-600">Processed file: <span class="font-mono">
+                    <%= fileName %>
+                </span></p>
+        </div>
+        <a href="/inventory/ledger" class="btn-secondary">Back to Ledger</a>
+    </div>
+
+    <!-- Template error -->
+    <% if (report.templateError) { %>
+        <div class="bg-red-100 border border-red-300 p-4 rounded mb-8 text-red-800 font-medium">
+            <i class="fas fa-exclamation-circle mr-2"></i>
+            <%= report.templateError %>
+        </div>
+        <% } %>
+
+            <!-- Summary Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div class="bg-blue-100 border border-blue-200 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-blue-800">
+                        <%= report.summary.totalRows %>
+                    </div>
+                    <div class="text-sm font-medium text-blue-700">Total Rows Processed</div>
+                </div>
+                <div class="bg-green-100 border border-green-200 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-green-800">
+                        <%= report.summary.successCount %>
+                    </div>
+                    <div class="text-sm font-medium text-green-700">Successful Entries</div>
+                </div>
+                <div class="bg-red-100 border border-red-200 p-4 rounded-lg text-center">
+                    <div class="text-3xl font-bold text-red-800">
+                        <%= report.summary.errorCount %>
+                    </div>
+                    <div class="text-sm font-medium text-red-700">Failed Entries</div>
+                </div>
+            </div>
+
+            <!-- Failed Entries Table -->
+            <% if (report.errors && report.errors.length> 0) { %>
+                <h2 class="text-xl font-semibold text-red-700 mb-4">Failed Entries</h2>
+                <div class="overflow-x-auto bg-white rounded-md shadow-sm mb-8">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="table-header">Row #</th>
+                                <th class="table-header">Problematic Data</th>
+                                <th class="table-header">Error Message</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <% report.errors.forEach(err=> { %>
+                                <tr class="bg-red-50">
+                                    <td class="px-6 py-4 font-medium">
+                                        <%= err.row %>
+                                    </td>
+                                    <td class="px-6 py-4 font-mono text-xs">
+                                        <%= err.data ? JSON.stringify(err.data) : 'N/A' %>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-red-600 font-semibold">
+                                        <%= err.reason %>
+                                    </td>
+                                </tr>
+                                <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+                <% } %>
+
+                    <!-- Success Entries Table -->
+                    <!-- Failed Entries Table -->
+                    <% if (report.errors && report.errors.length> 0) { %>
+                        <h2 class="text-xl font-semibold text-red-700 mb-4">Failed Entries</h2>
+                        <div class="overflow-x-auto bg-white rounded-md shadow-sm mb-8">
+                            <table class="min-w-full table-fixed divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="table-header w-20">Row #</th>
+                                        <th class="table-header w-1/3">Error Reason</th>
+                                        <th class="table-header w-1/2 truncate">Problematic Data</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <% report.errors.forEach(err=> { %>
+                                        <tr class="bg-red-50">
+                                            <td class="px-4 py-3 font-medium text-center">
+                                                <%= err.row %>
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-red-600 font-semibold">
+                                                <%= err.reason %>
+                                            </td>
+                                            <td class="px-4 py-3 text-xs font-mono text-gray-700 truncate max-w-xs">
+                                                <%= JSON.stringify(err.data) %>
+                                            </td>
+                                        </tr>
+                                        <% }) %>
+                                </tbody>
+                            </table>
+                        </div>
+                        <% } %>
+
+</div>

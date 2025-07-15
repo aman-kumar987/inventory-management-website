@@ -1,0 +1,6 @@
+exports.ROLES = Object.freeze({
+    SUPER_ADMIN: 'SUPER_ADMIN',
+    CLUSTER_MANAGER: 'CLUSTER_MANAGER',
+    USER: 'USER',
+    VIEWER: 'VIEWER'
+});

@@ -1,0 +1,136 @@
+<form action="/consumption" method="POST" id="consumption-form" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <!-- Form Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start mb-8 border-b border-gray-200 pb-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">
+                <%= title %>
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">Log new installations or replacements from existing stock.</p>
+        </div>
+        <div class="flex gap-3 mt-4 sm:mt-0 flex-shrink-0"><a href="/consumption"
+                class="btn-secondary">Cancel</a><button type="submit" class="btn-primary">Submit All Entries</button>
+        </div>
+    </div>
+
+    <!-- SHARED HEADER FIELD: Only Date remains here -->
+    <div class="bg-white p-6 md:p-8 rounded-xl shadow-lg mb-8">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Shared Details</h2>
+        <div>
+            <label for="date" class="form-label">Date of Consumption</label>
+            <input type="date" name="date" required class="form-input md:w-1/2">
+        </div>
+    </div>
+
+    <!-- Line Items Container -->
+    <div id="line-items-container" class="space-y-8"></div>
+
+    <!-- Add New Line Item Button -->
+    <div class="mt-8 flex justify-center"><button type="button" id="add-line-item-btn" class="btn-add-item"><i
+                class="fas fa-plus mr-2"></i>Add Consumption Entry</button></div>
+</form>
+
+<!-- ====================================================================== -->
+<!-- HIDDEN TEMPLATE (UPDATED) -->
+<!-- ====================================================================== -->
+<template id="line-item-template">
+    <div class="line-item-block bg-white p-6 rounded-xl shadow-lg relative border border-gray-200">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-semibold text-gray-700">Consumption Entry <span class="item-number">1</span></h2>
+            <button type="button" title="Remove this Entry"
+                class="remove-item-btn absolute top-4 right-4 btn-icon-subtle"><i
+                    class="fas fa-trash-alt fa-lg"></i></button>
+        </div>
+
+        <!-- Core Fields per Line Item (Location & Qty moved here) -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div><label class="form-label">Plant</label>
+                <% if (user.role==='USER' ) { %><input type="text" value="<%= plants[0]?.name || 'Your Plant' %>"
+                        disabled class="form-input form-input-disabled"><input type="hidden"
+                        name="lineItems[0][plantId]" value="<%= user.plantId %>">
+                    <% } else { %><select name="lineItems[0][plantId]" required class="form-input">
+                            <option value="">Select Plant</option>
+                            <% plants.forEach(plant=> { %><option value="<%= plant.id %>">
+                                    <%= plant.name %>
+                                </option>
+                                <% }) %>
+                        </select>
+                        <% } %>
+            </div>
+            <div><label class="form-label">Consumption Location</label><input type="text" name="lineItems[0][location]"
+                    required class="form-input"></div>
+            <div>
+                <label class="form-label">Sub Location (Optional)</label>
+                <input type="text" name="lineItems[0][subLocation]" class="form-input">
+            </div>
+            <div><label class="form-label">Quantity Consumed</label><input type="number" name="lineItems[0][quantity]"
+                    min="1" value="1" required class="form-input"></div>
+        </div>
+
+        <!-- Conditional "Old Received" Section -->
+        <div class="mt-8 p-4 border rounded-lg bg-yellow-50 border-yellow-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-yellow-800">Item Replacement / Old Received</h3><label
+                    class="toggle-switch-label"><span class="mr-3 text-sm font-medium">Is this a replacement?</span>
+                    <div class="toggle-switch"><input type="checkbox" name="lineItems[0][oldReceived]"
+                            class="toggle-checkbox old-received-toggle">
+                        <div class="toggle-track"></div>
+                        <div class="toggle-dot"></div>
+                    </div>
+                </label>
+            </div>
+            <div class="old-received-fields hidden mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label class="form-label">Item Code (Old)</label><select name="lineItems[0][old_itemCode]"
+                        data-required="true" class="form-input item-select-template" placeholder="Search old item...">
+                        <option value="">Select Item</option>
+                        <% items.forEach(item=> { %><option value="<%= item.id %>">
+                                <%= item.item_code %> - <%= item.item_description %>
+                            </option>
+                            <% }) %>
+                    </select></div>
+                <div><label class="form-label">Asset No. (Old)</label><input type="text"
+                        name="lineItems[0][old_assetNo]" class="form-input"></div>
+                <div><label class="form-label">Serial No. (Old)</label><input type="text"
+                        name="lineItems[0][old_serialNo]" class="form-input"></div>
+                <div><label class="form-label">PO No. (Old)</label><input type="text" name="lineItems[0][old_poNo]"
+                        class="form-input"></div>
+                <div class="md:col-span-2"><label class="form-label">Fault Remark</label><textarea
+                        name="lineItems[0][old_faultRemark]" rows="2" class="form-input"></textarea></div>
+            </div>
+        </div>
+
+        <!-- "New Installation" Section -->
+        <div class="mt-8 pt-6 border-t">
+            <h3 class="text-lg font-semibold text-gray-800">New Installation Details</h3>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label class="form-label">Item Code (New)</label><select name="lineItems[0][new_itemCode]" required
+                        class="form-input item-select-template" placeholder="Search new item...">
+                        <option value="">Select Item</option>
+                        <% items.forEach(item=> { %><option value="<%= item.id %>">
+                                <%= item.item_code %> - <%= item.item_description %>
+                            </option>
+                            <% }) %>
+                    </select></div>
+                <div><label class="form-label">Asset No. (New)</label><input type="text"
+                        name="lineItems[0][new_assetNo]" required class="form-input"></div>
+                <div><label class="form-label">Serial No. (New)</label><input type="text"
+                        name="lineItems[0][new_serialNo]" required class="form-input"></div>
+                <div><label class="form-label">PO No. (New)</label><input type="text" name="lineItems[0][new_poNo]"
+                        required class="form-input"></div>
+            </div>
+        </div>
+
+        <!-- Final Fields -->
+        <div class="mt-8 pt-6 border-t grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            <div><label class="form-label">General Remarks (Mandatory)</label><textarea name="lineItems[0][remarks]"
+                    rows="2" class="form-input" required></textarea></div>
+            <div class="flex items-end pb-2"><label class="toggle-switch-label"><input type="checkbox"
+                        name="lineItems[0][isReturnable]"
+                        class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"><span
+                        class="ml-2 text-sm text-gray-900 font-medium">Is this a returnable consumption?</span></label>
+            </div>
+        </div>
+    </div>
+</template>
+
+<script src="/js/consumption-form.js"></script>

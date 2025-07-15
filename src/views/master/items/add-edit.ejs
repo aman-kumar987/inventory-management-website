@@ -1,0 +1,64 @@
+<h1 class="text-2xl font-bold text-gray-800 mb-6"><%= title %></h1>
+
+<div class="bg-white p-8 rounded-lg shadow-md max-w-2xl mx-auto">
+    <!-- Display Validation Errors -->
+    <% if (errors && errors.length > 0) { %>
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <strong class="font-bold">Error!</strong>
+            <ul>
+                <% errors.forEach(err => { %>
+                    <li>- <%= err.msg %></li>
+                <% }) %>
+            </ul>
+        </div>
+    <% } %>
+
+    <form action="<%= typeof item.id !== 'undefined' ? '/items/' + item.id + '/edit' : '/items' %>" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Item Code -->
+            <div>
+                <label for="item_code" class="block text-sm font-medium text-gray-700">Item Code</label>
+                <input type="text" name="item_code" id="item_code" value="<%= typeof item.item_code !== 'undefined' ? item.item_code : '' %>" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+
+            <!-- Item Group -->
+            <div>
+                <label for="itemGroupId" class="block text-sm font-medium text-gray-700">Item Group</label>
+                <select name="itemGroupId" id="itemGroupId" required class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="">Select a Group</option>
+                    <% if (itemGroups.length > 0) { %>
+                        <% itemGroups.forEach(group => { %>
+                            <option value="<%= group.id %>" <%= (typeof item.itemGroupId !== 'undefined' && item.itemGroupId === group.id) ? 'selected' : '' %>>
+                                <%= group.name %>
+                            </option>
+                        <% }) %>
+                    <% } else { %>
+                        <option disabled>No groups found. Please create one first.</option>
+                    <% } %>
+                </select>
+            </div>
+            
+            <!-- UOM -->
+            <div>
+                <label for="uom" class="block text-sm font-medium text-gray-700">UOM (Unit of Measurement)</label>
+                <input type="text" name="uom" id="uom" value="<%= typeof item.uom !== 'undefined' ? item.uom : '' %>" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+        </div>
+
+        <!-- Item Description -->
+        <div class="mt-6">
+            <label for="item_description" class="block text-sm font-medium text-gray-700">Item Description</label>
+            <textarea name="item_description" id="item_description" rows="4" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"><%= typeof item.item_description !== 'undefined' ? (item.item_description || '') : '' %></textarea>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="mt-8 flex justify-end space-x-4">
+            <a href="/items" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</a>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700">
+                <%= typeof item.id !== 'undefined' ? 'Update Item' : 'Create Item' %>
+            </button>
+        </div>
+    </form>
+</div>

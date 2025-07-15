@@ -1,0 +1,16 @@
+<div class="max-w-2xl mx-auto"><div class="bg-white p-8 rounded-lg shadow-md">
+    <h1 class="text-2xl font-bold text-gray-800 mb-6"><%= title %></h1>
+    <form action="/users/<%= userToEdit.id %>/edit" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div><label for="name" class="form-label">Full Name</label><input type="text" name="name" value="<%= userToEdit.name %>" required class="form-input"></div>
+            <div><label for="email" class="form-label">Email</label><input type="email" name="email" value="<%= userToEdit.email %>" required class="form-input"></div>
+            <div><label for="role" class="form-label">Role</label><select name="role" class="form-input"><option value="USER" <%= userToEdit.role === 'USER' ? 'selected' : '' %>>User</option><option value="VIEWER" <%= userToEdit.role === 'VIEWER' ? 'selected' : '' %>>Viewer</option><option value="CLUSTER_MANAGER" <%= userToEdit.role === 'CLUSTER_MANAGER' ? 'selected' : '' %>>Cluster Manager</option><% if(user.role === 'SUPER_ADMIN') { %><option value="SUPER_ADMIN" <%= userToEdit.role === 'SUPER_ADMIN' ? 'selected' : '' %>>Super Admin</option><% } %></select></div>
+            <div><label for="status" class="form-label">Status</label><select name="status" class="form-input"><option value="ACTIVE" <%= userToEdit.status === 'ACTIVE' ? 'selected' : '' %>>Active</option><option value="INACTIVE" <%= userToEdit.status === 'INACTIVE' ? 'selected' : '' %>>Inactive</option></select></div>
+            <div><label for="plantId" class="form-label">Plant</label><select name="plantId" required class="form-input"><% plants.forEach(p => { %><option value="<%= p.id %>" <%= userToEdit.plantId === p.id ? 'selected' : '' %>><%= p.name %></option><% }) %></select></div>
+            <div><label for="clusterId" class="form-label">Cluster</label><select name="clusterId" class="form-input"><option value="">None</option><% clusters.forEach(c => { %><option value="<%= c.id %>" <%= userToEdit.clusterId === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %></select></div>
+            <div class="md:col-span-2"><label for="password" class="form-label">New Password (optional)</label><input type="password" name="password" placeholder="Leave blank to keep current password" class="form-input"></div>
+        </div>
+        <div class="mt-8 flex justify-end gap-x-4"><a href="/users" class="btn-secondary">Cancel</a><button type="submit" class="btn-primary">Update User</button></div>
+    </form>
+</div></div>

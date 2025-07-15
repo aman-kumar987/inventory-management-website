@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-100">
+<head>
+    <%- include('./partials/head') %>
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.css" rel="stylesheet">
+
+</head>
+<body class=" font-sans">
+
+    <% if (user) { %>
+        <div class="flex h-screen bg-gray-200">
+            <%- include('./partials/sidebar') %>
+            <div class="flex-1 flex flex-col overflow-hidden">
+                <%- include('./partials/header') %>
+                <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 md:p-6 lg:p-8">
+                    <%- include('./partials/flash') %>
+                    <%- body %>
+                </main>
+            </div>
+        </div>
+    <% } else { %>
+        <main>
+            <%- include('./partials/flash') %>
+            <%- body %>
+        </main>
+    <% } %>
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
+</body>
+</html>

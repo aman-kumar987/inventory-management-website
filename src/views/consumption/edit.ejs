@@ -1,0 +1,46 @@
+<div class="max-w-4xl mx-auto">
+    <form action="/consumption/<%= consumption.id %>/edit" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="bg-white p-8 rounded-lg shadow-md">
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">Edit Consumption Record</h1>
+            <p class="text-gray-600 mb-6">Plant: <span class="font-semibold"><%= consumption.plant.name %></span></p>
+
+            <!-- Main Details -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label class="form-label">Date of Consumption</label><input type="date" name="date" required class="form-input" value="<%= new Date(consumption.date).toISOString().split('T')[0] %>"></div>
+                <div><label class="form-label">Quantity Consumed</label><input type="number" name="quantity" min="1" required class="form-input" value="<%= consumption.quantity %>"></div>
+                <div><label class="form-label">Consumption Location</label><input type="text" name="location" required class="form-input" value="<%= consumption.consumption_location %>"></div>
+                <div><label class="form-label">Sub Location</label><input type="text" name="sub_location" class="form-input" value="<%= consumption.sub_location || '' %>"></div>
+            </div>
+
+            <!-- Old Received Section -->
+            <div class="mt-8 pt-4 border-t">
+                <h3 class="text-lg font-semibold text-gray-800">Old Item Details (Replacement)</h3>
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div><label class="form-label">Old Item Code</label><select name="old_itemCode" class="form-input"><option value="">None</option><% items.forEach(item => { %><option value="<%= item.id %>" <%= consumption.old_itemCode === item.id ? 'selected' : '' %>><%= item.item_code %></option><% }) %></select></div>
+                    <div><label class="form-label">Old Asset No.</label><input type="text" name="old_assetNo" class="form-input" value="<%= consumption.old_assetNo || '' %>"></div>
+                </div>
+            </div>
+
+            <!-- New Installation Section -->
+            <div class="mt-8 pt-4 border-t">
+                <h3 class="text-lg font-semibold text-gray-800">New Item Details (Installation)</h3>
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div><label class="form-label">New Item Code</label><select name="new_itemCode" required class="form-input"><option value="">Select Item</option><% items.forEach(item => { %><option value="<%= item.id %>" <%= consumption.new_itemCode === item.id ? 'selected' : '' %>><%= item.item_code %></option><% }) %></select></div>
+                    <div><label class="form-label">New Asset No.</label><input type="text" name="new_assetNo" required class="form-input" value="<%= consumption.new_assetNo %>"></div>
+                </div>
+            </div>
+            
+            <!-- Final Fields -->
+            <div class="mt-8 pt-4 border-t">
+                <div class="mb-4"><label class="form-label">General Remarks</label><textarea name="remarks" rows="3" required class="form-input"><%= consumption.remarks %></textarea></div>
+                <div class="flex items-center"><input type="checkbox" name="isReturnable" class="h-4 w-4 text-indigo-600 border-gray-300 rounded" <%= consumption.isReturnable ? 'checked' : '' %>><label class="ml-2 font-medium">Is Returnable?</label></div>
+            </div>
+
+            <div class="mt-8 flex justify-end space-x-4">
+                <a href="/consumption" class="btn-secondary">Cancel</a>
+                <button type="submit" class="btn-primary">Update Consumption</button>
+            </div>
+        </div>
+    </form>
+</div>

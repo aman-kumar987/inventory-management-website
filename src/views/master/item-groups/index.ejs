@@ -1,0 +1,67 @@
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <!-- Left side: Add/Edit Form -->
+    <div class="md:col-span-1">
+        <!-- The form's action and title change dynamically -->
+        <h2 class="text-xl font-bold text-gray-800 mb-4">
+            <%= groupToEdit ? 'Edit Item Group' : 'Add New Item Group' %>
+        </h2>
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <form action="<%= groupToEdit ? `/item-groups/${groupToEdit.id}/edit` : '/item-groups' %>" method="POST">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div>
+                    <label for="name" class="form-label">Group Name</label>
+                    <input type="text" name="name" id="name" required class="form-input" value="<%= groupToEdit ? groupToEdit.name : '' %>">
+                </div>
+                <div class="mt-6 flex gap-x-3">
+                    <button type="submit" class="btn-primary flex-grow">
+                        <%= groupToEdit ? 'Update Group' : 'Create Group' %>
+                    </button>
+                    <% if (groupToEdit) { %>
+                        <a href="/item-groups" class="btn-secondary">Cancel</a>
+                    <% } %>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Right side: List of Existing Groups -->
+    <div class="md:col-span-2">
+        <h2 class="text-xl font-bold text-gray-800 mb-4"><%= title %></h2>
+        <div class="overflow-x-auto bg-white rounded-md shadow-sm">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="table-header">Name</th>
+                        <th class="table-header">Created At</th>
+                        <th class="table-header text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <% if (itemGroups.length > 0) { %>
+                        <% itemGroups.forEach(group => { %>
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium text-gray-900"><%= group.name %></td>
+                                <td class="px-6 py-4 text-sm text-gray-500"><%= new Date(group.createdAt).toLocaleDateString() %></td>
+                                <td class="px-6 py-4 text-center text-sm font-medium space-x-4">
+                                    <!-- Edit Link -->
+                                    <a href="/item-groups?edit=<%= group.id %>" class="text-indigo-600 hover:text-indigo-900" title="Edit">
+                                        <i class="fas fa-pencil-alt"></i>
+                                    </a>
+                                    <!-- Delete Form -->
+                                    <form action="/item-groups/<%= group.id %>/delete" method="POST" class="inline" onsubmit="return confirm('Are you sure? Deleting this group will also delete all items within it.');">
+                                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                        <button type="submit" class="text-red-600 hover:text-red-900" title="Delete">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    <% } else { %>
+                        <tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">No item groups found.</td></tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

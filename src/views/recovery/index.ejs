@@ -1,0 +1,115 @@
+<div class="flex justify-between items-center mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">
+            <%= title %>
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">Restore soft-deleted records. Restoring a parent entity will restore its
+            children.</p>
+    </div>
+</div>
+
+<!-- TABS FOR NAVIGATION -->
+<div class="mb-6 border-b border-gray-200">
+    <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+        <% const tabs=[ { name: 'Items' , view: 'items' }, { name: 'Item Groups' , view: 'item-groups' }, {
+            name: 'Plants' , view: 'plants' }, { name: 'Clusters' , view: 'clusters' }, { name: 'Users' , view: 'users'
+            }, ]; %>
+            <% tabs.forEach(tab=> { %>
+                <a href="/recovery?view=<%= tab.view %>"
+                    class="<%= currentView === tab.view ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' %> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    <%= tab.name %>
+                </a>
+                <% }) %>
+    </nav>
+</div>
+
+<div class="overflow-x-auto bg-white rounded-md shadow-sm">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <!-- Table headers change based on the view -->
+            <% if (currentView==='items' ) { %>
+                <tr>
+                    <th class="table-header">Item</th>
+                    <th class="table-header">Group</th>
+                    <th class="table-header">Deleted At</th>
+                    <!-- MODIFIED: Fixed width and right-aligned action column -->
+                    <th class="table-header text-right w-32">Action</th>
+                </tr>
+                <% } else if (currentView==='item-groups' || currentView==='clusters' ) { %>
+                    <tr>
+                        <th class="table-header">Name</th>
+                        <th class="table-header">Deleted At</th>
+                        <th class="table-header text-right w-32">Action</th>
+                    </tr>
+                    <% } else if (currentView==='plants' ) { %>
+                        <tr>
+                            <th class="table-header">Plant Name</th>
+                            <th class="table-header">Cluster</th>
+                            <th class="table-header">Deleted At</th>
+                            <th class="table-header text-right w-32">Action</th>
+                        </tr>
+                        <% } else if (currentView==='users' ) { %>
+                            <tr>
+                                <th class="table-header">User</th>
+                                <th class="table-header">Deleted At</th>
+                                <th class="table-header text-right w-32">Action</th>
+                            </tr>
+                            <% } %>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            <% if (data.length> 0) { %>
+                <% data.forEach(record=> { %>
+                    <tr class="hover:bg-gray-50">
+                        <!-- Table cells also change based on the view -->
+                        <% if (currentView==='items' ) { %>
+                            <td class="px-6 py-4 text-sm">
+                                <div class="font-medium text-gray-900">
+                                    <%= record.item_code %>
+                                </div>
+                                <div class="text-gray-500">
+                                    <%= record.item_description || '-' %>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-500">
+                                <%= record.itemGroup.name %>
+                            </td>
+                            <% } else if (currentView==='item-groups' || currentView==='clusters' ) { %>
+                                <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                                    <%= record.name %>
+                                </td>
+                                <% } else if (currentView==='plants' ) { %>
+                                    <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                                        <%= record.name %>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-gray-500">
+                                        <%= record.cluster.name %>
+                                    </td>
+                                    <% } else if (currentView==='users' ) { %>
+                                        <td class="px-6 py-4 text-sm">
+                                            <div class="font-medium text-gray-900">
+                                                <%= record.name %>
+                                            </div>
+                                            <div class="text-gray-500">
+                                                <%= record.email %>
+                                            </div>
+                                        </td>
+                                        <% } %>
+                                            <td class="px-6 py-4 text-sm text-gray-500">
+                                                <%= new Date(record.updatedAt).toLocaleString() %>
+                                            </td>
+                                            <!-- MODIFIED: Fixed width and right-aligned action cell -->
+                                            <td class="px-6 py-4 text-right w-32">
+                                                <%- include('../partials/undo-button', { id: record.id, model:
+                                                    currentView, csrfToken: csrfToken }) %>
+                                            </td>
+                    </tr>
+                    <% }) %>
+                        <% } else { %>
+                            <tr>
+                                <td colspan="5" class="px-6 py-4 text-center text-gray-500">No deleted records in this
+                                    category.</td>
+                            </tr>
+                            <% } %>
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,36 @@
+<% if (totalPages > 1) { %>
+    <% 
+        // Helper to convert the filters object into a URL query string
+        const filterParams = new URLSearchParams(filters || {}).toString();
+        const queryString = filterParams ? '&' + filterParams : '';
+    %>
+    <div class="mt-6 flex items-center justify-between bg-white px-4 py-3 sm:px-6 rounded-md border-t border-gray-200">
+        <!-- Desktop pagination -->
+        <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div>
+                 <p class="text-sm text-gray-700">
+                    Showing
+                    <span class="font-medium"><%= Math.max(1, (currentPage - 1) * limit + 1) %></span>
+                    to
+                    <span class="font-medium"><%= Math.min(currentPage * limit, totalItems) %></span>
+                    of
+                    <span class="font-medium"><%= totalItems %></span>
+                    results
+                </p>
+            </div>
+            <div>
+                <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                    <a href="<%= baseUrl %>?page=<%= Math.max(1, currentPage - 1) %><%= queryString %>" class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">«</a>
+                    <% for(let i = 1; i <= totalPages; i++) { %>
+                        <% if(i === currentPage) { %>
+                            <span aria-current="page" class="relative z-10 inline-flex items-center bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"><%= i %></span>
+                        <% } else { %>
+                            <a href="<%= baseUrl %>?page=<%= i %><%= queryString %>" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"><%= i %></a>
+                        <% } %>
+                    <% } %>
+                    <a href="<%= baseUrl %>?page=<%= Math.min(totalPages, currentPage + 1) %><%= queryString %>" class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">»</a>
+                </nav>
+            </div>
+        </div>
+    </div>
+<% } %>

@@ -1,0 +1,12 @@
+<header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
+    <!-- Can add a mobile menu button here later -->
+    <div>
+        <h1 class="text-xl font-semibold"><%= typeof title !== 'undefined' ? title : 'Dashboard' %></h1>
+    </div>
+    
+    <!-- User Info -->
+    <div class="flex items-center">
+        <span class="text-gray-600">Welcome, <span class="font-semibold"><%= user.name %></span></span>
+        <!-- Can add a dropdown profile menu here later -->
+    </div>
+</header>

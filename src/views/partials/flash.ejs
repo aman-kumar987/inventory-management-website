@@ -1,0 +1,10 @@
+<% if (typeof flash !== 'undefined' && flash && flash.message) { %>
+    <% 
+        let bgColor = 'bg-blue-500'; // Default
+        if (flash.type === 'success') bgColor = 'bg-green-500';
+        if (flash.type === 'error') bgColor = 'bg-red-500';
+    %>
+    <div class="p-4 mb-4 text-white rounded-md shadow-lg <%= bgColor %>" role="alert">
+        <p><%= flash.message %></p>
+    </div>
+<% } %>

@@ -1,0 +1,48 @@
+<div class="flex items-center justify-center min-h-screen bg-gray-50">
+    <div class="w-full max-w-md p-8 space-y-6 bg-white rounded-2xl shadow-xl">
+
+        <!-- App Name/Logo Placeholder -->
+        <div class="text-center">
+            <i class="fas fa-boxes text-4xl text-indigo-600"></i>
+            <h1 class="text-3xl font-bold text-gray-800 mt-2">Inventory App</h1>
+            <p class="text-gray-500">Sign in to continue</p>
+        </div>
+
+        <form class="space-y-6" action="/login" method="POST">
+            <!-- CSRF Token -->
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+            <div>
+                <label for="email" class="form-label">Email address</label>
+                <input type="email" name="email" id="email" required class="form-input mt-1">
+            </div>
+
+            <div>
+                <label for="password" class="form-label">Password</label>
+                <input type="password" name="password" id="password" required class="form-input mt-1">
+            </div>
+
+            <div>
+                <button type="submit" class="w-full btn-primary">
+                    Sign in
+                </button>
+            </div>
+        </form>
+
+        <hr />
+
+        <!-- Link to Registration Page -->
+        <p class="text-center text-sm text-gray-600">
+            Don't have an account?
+            <a href="/register" class="font-medium text-indigo-600 hover:text-indigo-500 hover:underline">
+                Register here
+            </a>
+        </p>
+
+        <div class="text-sm text-center">
+            <a href="/forgot-password" class="font-medium text-indigo-600 hover:text-indigo-500">
+                Forgot your password?
+            </a>
+        </div>
+    </div>
+</div>

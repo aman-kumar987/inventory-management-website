@@ -1,0 +1,49 @@
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <!-- Left side: Add/Edit Form -->
+    <div class="lg:col-span-1">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">
+            <%= editUser ? 'Edit User' : 'Add New User' %>
+        </h2>
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <form action="<%= editUser ? `/cluster/users/${editUser.id}/edit` : '/cluster/users' %>" method="POST">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div class="space-y-4">
+                    <div><label class="form-label">Full Name</label><input type="text" name="name" required class="form-input" value="<%= editUser ? editUser.name : '' %>"></div>
+                    <div><label class="form-label">Email</label><input type="email" name="email" required class="form-input" value="<%= editUser ? editUser.email : '' %>"></div>
+                    <div><label class="form-label">Password</label><input type="password" name="password" <%= !editUser ? 'required' : '' %> class="form-input" placeholder="<%= editUser ? 'Leave blank to keep same' : '' %>"></div>
+                    <div><label class="form-label">Role</label><select name="role" required class="form-input"><option value="USER" <%= (editUser && editUser.role === 'USER') ? 'selected' : '' %>>User</option><option value="VIEWER" <%= (editUser && editUser.role === 'VIEWER') ? 'selected' : '' %>>Viewer</option></select></div>
+                    <div><label class="form-label">Plant</label><select name="plantId" required class="form-input"><% plants.forEach(plant => { %><option value="<%= plant.id %>" <%= (editUser && editUser.plantId === plant.id) ? 'selected' : '' %>><%= plant.name %></option><% }) %></select></div>
+                </div>
+                <div class="mt-6 flex gap-x-3">
+                    <button type="submit" class="btn-primary flex-grow"><%= editUser ? 'Update User' : 'Create User' %></button>
+                    <% if (editUser) { %><a href="/cluster/users" class="btn-secondary">Cancel</a><% } %>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Right side: List of Existing Users -->
+    <div class="lg:col-span-2">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">Users in Your Cluster</h2>
+        <div class="overflow-x-auto bg-white rounded-md shadow-sm">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr><th class="table-header">Name</th><th class="table-header">Role</th><th class="table-header">Plant</th><th class="table-header text-center">Actions</th></tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <% users.forEach(user => { %>
+                        <tr>
+                            <td class="px-6 py-4"><div class="font-medium"><%= user.name %></div><div class="text-sm text-gray-500"><%= user.email %></div></td>
+                            <td class="px-6 py-4 text-sm"><%= user.role.replace('_', ' ') %></td>
+                            <td class="px-6 py-4 text-sm"><%= user.plant.name %></td>
+                            <td class="px-6 py-4 text-center text-sm space-x-4">
+                                <a href="/cluster/users?edit=<%= user.id %>" class="text-indigo-600 hover:text-indigo-900" title="Edit"><i class="fas fa-pencil-alt"></i></a>
+                                <form action="/cluster/users/<%= user.id %>/delete" method="POST" class="inline" onsubmit="return confirm('Are you sure?');"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="text-red-600 hover:text-red-900" title="Delete"><i class="fas fa-trash-alt"></i></button></form>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

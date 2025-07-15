@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+/*
+ * =========================================
+ *  Sidebar Component Styles
+ * =========================================
+*/
+.sidebar-link {
+  @apply flex items-center gap-x-3 px-4 py-2 rounded-md text-gray-300 hover:bg-gray-700 hover:text-white transition-colors;
+}
+
+.sidebar-sublink {
+  @apply block pl-12 pr-4 py-2 rounded-md text-sm text-gray-400 hover:bg-gray-700 hover:text-white transition-colors;
+}
+
+/* --- Form & Layout --- */
+.form-label {
+  @apply block text-sm font-medium text-gray-700 mb-1.5;
+}
+
+.form-input {
+  @apply block w-full rounded-md shadow-sm sm:text-sm border border-black px-3 py-2 focus:ring-2 focus:ring-indigo-300 focus:border-indigo-500;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-input-disabled {
+  @apply bg-gray-100 cursor-not-allowed;
+}
+
+/* --- Buttons --- */
+.btn-primary {
+  @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors;
+}
+
+.btn-add-item {
+  @apply flex items-center gap-2 px-6 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-indigo-500 hover:text-indigo-600 transition;
+}
+
+.btn-icon-subtle {
+  @apply text-gray-400 hover:text-red-600 transition-colors;
+}
+
+/* --- Custom Toggle Switch --- */
+.toggle-switch-label {
+  @apply flex items-center cursor-pointer;
+}
+
+.toggle-switch {
+  @apply relative;
+}
+
+.toggle-checkbox {
+  @apply sr-only;
+}
+
+.toggle-track {
+  @apply block bg-gray-300 w-14 h-8 rounded-full transition-colors;
+}
+
+.toggle-dot {
+  @apply absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform;
+}
+
+.toggle-checkbox:checked ~ .toggle-track {
+  @apply bg-indigo-300;
+}
+
+.toggle-checkbox:checked ~ .toggle-dot {
+  @apply translate-x-full bg-indigo-600;
+}
+
+/* ... all your other CSS ... */
+
+/*
+ * =========================================
+ *  Tom Select Overrides (SIMPLIFIED & CORRECTED)
+ * =========================================
+*/
+.ts-control {
+  @apply block w-full rounded-md shadow-sm sm:text-sm border border-black px-3 py-1.5;
+  @apply focus-within:ring-2 focus-within:ring-indigo-300 focus-within:border-indigo-500;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+/* ... all your other .form-label, .btn-primary, etc. styles ... */
+
+/*
+ * =========================================
+ *  Table Component Styles
+ * =========================================
+*/
+.table-header {
+  @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+}
+
+/* ... add to bottom of your file ... */
+.section-header {
+    @apply text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4;
+}
+.detail-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4;
+}
+.input-with-btn {
+    @apply flex items-center gap-x-2;
+}
+.edit-btn {
+    @apply text-gray-400 hover:text-indigo-600 focus:outline-none transition-colors h-10 px-3;
+}
+
+
+.table-header {
+    @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+}
+
+/* --- ADD THIS NEW CLASS --- */
+.table-cell {
+    @apply px-6 py-4 whitespace-nowrap text-sm;
+}
+
+/*
+ * =========================================
+ *  NEW: Advanced Filter Component Styles
+ * =========================================
+ *  These classes are used for the compact quantity filters.
+*/
+.filter-group {
+    @apply flex items-center w-full;
+}
+
+.filter-op-select {
+    /* Inherits from .form-input but with specific border changes */
+    @apply rounded-r-none border-r-0;
+    /* Give the operator dropdown a fixed, compact width */
+    flex: 0 0 70px;
+}
+
+.filter-val-input {
+    /* Inherits from .form-input but with specific border changes */
+    @apply rounded-l-none;
+}

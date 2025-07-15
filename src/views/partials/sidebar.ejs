@@ -1,0 +1,120 @@
+<!-- Sidebar -->
+<aside class="w-64 flex-shrink-0 bg-gray-800 text-gray-300 flex flex-col">
+    <!-- Logo/Brand (remains the same) -->
+    <div
+        class="h-16 flex items-center justify-center text-white text-xl font-bold border-b border-gray-700 flex-shrink-0">
+        Shree Inventory
+    </div>
+
+    <!-- SCROLLABLE Navigation Area -->
+    <div class="flex-1 overflow-y-auto">
+        <nav class="px-2 py-4 space-y-2">
+            <a href="/dashboard" class="sidebar-link">Dashboard</a>
+
+            <!-- ... -->
+            <!-- MODIFIED Inventory Section (Collapsible) -->
+            <div x-data="{ open: false }">
+                <button @click="open = !open" class="sidebar-link w-full flex justify-between items-center">
+                    <span>Inventory</span>
+                    <!-- ... icon ... -->
+                </button>
+                <div x-show="open" x-transition class="mt-1 space-y-1">
+                    <a href="/inventory/summary" class="sidebar-sublink">Stock Summary</a>
+                    <a href="/inventory/ledger" class="sidebar-sublink">Transaction Ledger</a>
+                    <% if (user.role !=='VIEWER' ) { %>
+                        <a href="/inventory/new" class="sidebar-sublink">Add New Stock</a>
+                        <% } %>
+                </div>
+            </div>
+            <!-- ... -->
+
+            <!-- MODIFIED Consumption Section (Collapsible) -->
+            <div x-data="{ open: false }">
+                <!-- Main Consumption Button -->
+                <button @click="open = !open" class="sidebar-link w-full flex justify-between items-center">
+                    <span>Consumption</span>
+                    <svg class="w-4 h-4 transition-transform" :class="{'rotate-180': open}" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <!-- Nested Sub-links -->
+                <div x-show="open" x-transition class="mt-1 space-y-1">
+                    <a href="/consumption" class="sidebar-sublink">Consumption History</a>
+                    <% if (user.role !=='VIEWER' ) { %>
+                        <a href="/consumption/new" class="sidebar-sublink">Add Consumption</a>
+                        <% } %>
+                </div>
+            </div>
+
+            <!-- Master Data Section (remains the same, but with new classes) -->
+            <% if (user.role==='SUPER_ADMIN' ) { %> <!-- CHANGED: Only Super Admin can see this -->
+                <div class="pt-4">
+                    <h3 class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Master Data</h3>
+                    <div class="mt-2 space-y-1">
+                        <a href="/items" class="sidebar-link"><i
+                                class="fas fa-tag w-6 text-center"></i><span>Items</span></a>
+                        <a href="/item-groups" class="sidebar-link"><i
+                                class="fas fa-tags w-6 text-center"></i><span>Item Groups</span></a>
+                        <a href="/plants" class="sidebar-link"><i
+                                class="fas fa-industry w-6 text-center"></i><span>Plants</span></a>
+                        <a href="/clusters" class="sidebar-link"><i
+                                class="fas fa-network-wired w-6 text-center"></i><span>Clusters</span></a>
+                    </div>
+                </div>
+                <% } %>
+
+                    <!-- Add a new block specifically for Cluster Manager tasks -->
+                    <% if (user.role==='CLUSTER_MANAGER' ) { %>
+                        <div class="pt-4">
+                            <h3 class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Management
+                            </h3>
+                            <div class="mt-2 space-y-1">
+                                <a href="/cluster/users" class="sidebar-link"><i
+                                        class="fas fa-users w-6 text-center"></i><span>Manage Users</span></a>
+                                <a href="/approvals/scrap" class="sidebar-link"><i
+                                        class="fas fa-check-double w-6 text-center"></i><span>Pending
+                                        Approvals</span></a>
+                            </div>
+                        </div>
+                        <% } %>
+
+                            <!-- System Admin Section (remains the same, but with new classes) -->
+                            <% if (user.role==='SUPER_ADMIN' ) { %> <!-- This was already correct -->
+                                <div class="pt-4">
+                                    <h3 class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                        Administration
+                                    </h3>
+                                    <div class="mt-2 space-y-1">
+                                        <a href="/users" class="sidebar-link"><i
+                                                class="fas fa-users-cog w-6 text-center"></i><span>User
+                                                Management</span></a>
+                                        <a href="/approvals/scrap" class="sidebar-link"><i
+                                                class="fas fa-check-double w-6 text-center"></i><span>Pending
+                                                Approvals</span></a>
+                                        <a href="/admin/logs" class="sidebar-link"><i
+                                                class="fas fa-clipboard-list w-6 text-center"></i><span>Audit
+                                                Logs</span></a>
+                                        <a href="/recovery" class="sidebar-link"><i
+                                                class="fas fa-trash-restore w-6 text-center"></i><span>Data
+                                                Recovery</span></a>
+                                    </div>
+                                </div>
+                                <% } %>
+        </nav>
+    </div>
+
+    <!-- Logout Button (remains the same) -->
+    <div class="p-4 border-t border-gray-700 flex-shrink-0">
+        <a href="/logout"
+            class="w-full text-left flex items-center px-4 py-2 rounded-md hover:bg-red-600 hover:text-white">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                </path>
+            </svg>
+            Logout
+        </a>
+    </div>
+</aside>

@@ -1,0 +1,253 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model session {
+  sid    String   @id
+  sess   Json
+  expire DateTime
+  @@ignore
+}
+
+// -------------------
+// ENUMS (Corrected Syntax)
+// -------------------
+enum Role {
+  SUPER_ADMIN
+  CLUSTER_MANAGER
+  USER
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING_APPROVAL
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// -------------------
+// CORE MODELS
+// -------------------
+model User {
+  id                String          @id @default(uuid())
+  name              String
+  email             String          @unique
+  password          String
+  role              Role
+  status            UserStatus      @default(ACTIVE)
+  isDeleted         Boolean         @default(false)
+  plantId           String
+  clusterId         String?
+  lastLoginAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  createdBy         String?
+  updatedBy         String?
+  plant             Plant           @relation(fields: [plantId], references: [id])
+  cluster           Cluster?        @relation(fields: [clusterId], references: [id])
+  changeHistory     ChangeHistory[]
+  activityLogs      ActivityLog[]
+  scrapApprovalsReq ScrapApproval[]   @relation("Requestor")
+  scrapApprovalsApp ScrapApproval[]   @relation("Approver")
+  passwordResetTokens PasswordResetToken[]
+  @@index([isDeleted, status])
+}
+
+model Cluster {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  isDeleted Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?
+  updatedBy String?
+  plants    Plant[]
+  users     User[]
+  @@index([isDeleted])
+}
+
+model Plant {
+  id           String         @id @default(uuid())
+  name         String         @unique
+  clusterId    String
+  isDeleted    Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  createdBy    String?
+  updatedBy    String?
+  cluster      Cluster        @relation(fields: [clusterId], references: [id])
+  users        User[]
+  inventories  Inventory[]
+  consumptions Consumption[]
+  currentStocks CurrentStock[]
+  @@index([isDeleted])
+}
+
+model ItemGroup {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
+  items     Item[]
+  @@index([isDeleted])
+}
+
+model Item {
+  id               String         @id @default(uuid())
+  item_code        String         @unique
+  item_description String?
+  uom              String
+  itemGroupId      String
+  isDeleted        Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  createdBy        String?
+  updatedBy        String?
+  itemGroup        ItemGroup      @relation(fields: [itemGroupId], references: [id])
+  inventories      Inventory[]
+  consumptions     Consumption[]
+  currentStocks    CurrentStock[]
+  oldConsumptions  Consumption[] @relation("OldItem")
+  @@index([isDeleted, item_code])
+}
+
+model Inventory {
+  id                String    @id @default(uuid())
+  reservationNumber String
+  date              DateTime
+  plantId           String
+  itemId            String
+  newQty            Int       @default(0)
+  oldUsedQty        Int       @default(0)
+  scrappedQty       Int       @default(0)
+  consumptionAmount Int       @default(0)
+  total             Int       @default(0)
+  remarks           String?   
+  scrapApprovals    ScrapApproval[]
+  isDeleted         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  createdBy         String?
+  updatedBy         String?
+  plant             Plant     @relation(fields: [plantId], references: [id])
+  item              Item      @relation(fields: [itemId], references: [id])
+  @@index([reservationNumber])
+}
+
+model CurrentStock {
+  id        String   @id @default(uuid())
+  plantId   String
+  itemId    String
+  totalQty  Int
+  updatedAt DateTime @updatedAt
+  plant     Plant    @relation(fields: [plantId], references: [id])
+  item      Item     @relation(fields: [itemId], references: [id])
+  isDeleted    Boolean  @default(false)
+  @@unique([plantId, itemId])
+}
+
+model Consumption {
+  id                   String   @id @default(uuid())
+  date                 DateTime
+  plantId              String
+  itemId               String   // This will store the ID of the NEW item installed
+  consumption_location String
+  sub_location         String
+  quantity             Int
+  isReturnable         Boolean  @default(false)
+  remarks              String
+  isDeleted            Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  createdBy            String?
+  updatedBy            String?
+
+  // --- NEW INSTALLATION FIELDS ---
+  newInstallation      Boolean  @default(false) // Field was missing
+  new_itemCode         String?                  // This can be the same as itemId
+  new_assetNo          String?
+  new_serialNo         String?
+  new_poNo             String?
+
+  // --- OLD RECEIVED FIELDS ---
+  oldAndReceived       Boolean  @default(false) // Field was missing
+  old_itemCode         String?                  // This is the FK to the old item
+  old_assetNo          String?
+  old_serialNo         String?
+  old_poNo             String?
+  old_faultRemark      String?
+
+  // --- RELATIONS ---
+  plant                Plant    @relation(fields: [plantId], references: [id])
+  item                 Item     @relation(fields: [itemId], references: [id])
+  oldItem              Item?    @relation("OldItem", fields: [old_itemCode], references: [id])
+}
+
+model ScrapApproval {
+  id            String         @id @default(uuid())
+  inventoryId   String
+  requestedQty  Int
+  status        ApprovalStatus @default(PENDING)
+  remarks       String?
+  requestedById String
+  approvedById  String?
+  processedAt   DateTime?
+  isDeleted     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  inventory     Inventory      @relation(fields: [inventoryId], references: [id])
+  requestedBy   User           @relation("Requestor", fields: [requestedById], references: [id])
+  approvedBy    User?          @relation("Approver", fields: [approvedById], references: [id])
+  @@index([status])
+}
+
+model ChangeHistory {
+  id          String   @id @default(uuid())
+  modelName   String
+  recordId    String
+  fieldName   String
+  oldValue    String?
+  newValue    String?
+  changedById String
+  changedAt   DateTime @default(now())
+  changedBy   User     @relation(fields: [changedById], references: [id])
+  @@index([modelName, recordId])
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  ipAddress String?
+  details   Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+  @@index([action])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique // This will store the HASHED token
+  userId    String
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

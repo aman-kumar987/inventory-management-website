@@ -1,0 +1,235 @@
+# mujhe ek inventory management ke liye website chahiye.
+## website in technologies ko use krke banani hai
+backend -- node + express,
+database -- postgresql, prisma,
+frontend -- ejs (with layout), tailwindcss, js
+
+## website ka explaination
+Requirements: mere paas ek excel sheet hai abhi jismein mein inventory ko manage krta hun.
+current excel sheet ka format
+Sr. No. -- Plant -- Item Group -- Item -- Item Name -- UOM -- New -- Old & Used -- Scrapped -- Total
+mein iski ek image bhi share kr dunga agar chahiye to.
+
+Kya chahiye:
+1. User register page jahan user register kr sake.
+2. Login page jahan user login kr paye.
+2.1. User ke paas forget password and change password ki facility honi chahiye 
+3. User 4 types ke honge a. Super User, b. Cluster Manager, c. User, d. Viewer.
+4. every user will be assigned a plant Id and some special users will be assigned plantid with cluster id also. Cluster Id will not be assigned to every user.
+5. There will be a cluster table which contain the list of clusters.
+6. There will be a plant table which contain the list of plants. each plant must be from a cluster in a cluster list. every plant will be assigned a cluster id whom it belongs to.
+7. there will be a item group table which contain the list of item groups.
+8. there will be a item table which contain the list of items. each item will have a item code and item description, uom. and would be associated with one item group only.
+9. there will be a inventory table which contain the list of inventory. This require some explaination.
+explaination: abhi jo excel file ka format hai usi mein data save hoga with some additions in the columns like the following:
+Sr. No. -- Plant -- Item Group -- Item Code -- Item Description -- UOM -- New -- Old & Used -- Scrapped -- consumption amount -- Total -- edit button
+
+here Item Code = Item in the current excel sheet and Item Description = Item Name in the current excel sheet.
+
+page mein 2 button honge a. Add inventory, b. Add consumption.
+
+add inventory ke fields honge 
+* Reservation Number -- multiple entries with same number can exists
+* Date -- Calender so that user can select the Date
+* Item Group
+* Item Code
+* Category + Quantity (an + button will be there so that user can add another category with different quantity)
+* Asset No. (optional)
+* Po. No. (optional)
+* Remark (optional)
+
+add consumption ke fields honge
+* Date -- Calender so that user can select the Date
+* Consumption location -- Text
+* Quantity
+
+* Old and received -- yes/ no -- mandatory
+    if yes then visible fields
+        item code -- mandatory
+        Asset no. -- optional
+        Serial no. -- optional
+        Po. No. -- optional
+        Fault Remark -- optional
+
+* New Installation -- mandatory
+    item code -- mandatory
+    Asset no. -- mandatory
+    Serial no. -- mandatory
+    Po. No. -- mandatory
+    
+* is Returnable flag -- yes/no -- mandatory
+
+ismein niche ek add (+) button chahiye jo fields b to h ko waps form mein add kr dega for second entry. but Reservation number wali field re add nahi hogi.
+Matlab consumption table mein multiple entries ho sakti hai jo same reservation number ke hongi.
+
+Ismein user hierarchy honi chahiye 
+Super Admin >> Cluster manager (can see and edit the data for all the plants in the cluster for inventory and user) >> User (can see and edit the data for the assigned plant) >> Viewer (can only see the data for the assigned plant)
+
+There exists a soft delete functionality which also work in hierarchy
+eg. if an item group is soft deleted all the items related to the item group will also be soft deleted.
+and all the inventory related to the item group & deleted item will also be soft deleted.
+
+or if only a single item is soft deleted all the entries for the item in the inventory table gets automatically soft deleted.
+
+similarly for plants and plant cluster.
+if a plant cluster is soft deleted all the plants related to that cluster will be automatically soft deleted.
+and the entries in the inventory table for the plants with that cluster will be automatically soft deleted.
+
+ek dashboard page bhi chahiye
+
+yaad rahe website ka jo UI and UX hai bahut aacha hona chahiye.
+
+Haan ismein kuch cheezein aur hai,
+user inventory ka data jab edit krke scrapped field ki value ko badhaye to respective cluster manager ke paas approval ke liye requrest jani chahiye keval uske approval ke baad hi scrapped items ki quantity old&used se subtract hokar scrapped mein add honi chahiye.
+
+Super admin ke paas soft deletes ko undo krne ka option bhi hona chahiye.
+
+Har table mein 5 who columns hone chahiye
+1. CREATED_BY: User ID of the creator.
+2. CREATION_DATE: Date of creation.
+3. LAST_UPDATED_BY: User ID of the last updater.
+4. LAST_UPDATE_DATE: Date of last update.
+5. LAST_UPDATE_LOGIN: User's login ID at the time of the last update
+
+Data mein har change ki history maintain honi chahiye ki kab kisne kya change kiya hai.
+Super Admin ke paas iska access hona chahiye.
+
+Kisi bhi user ke details ko update krne ka right super admin ke paas hona chahiye aur cluster manager ke paas kisi bhi user ko jo bhi uske plant ya cluster se related plant se related ho usko edit krne ka right bhi cluster manager ke paas hona chahiye.
+
+mujhe pata hai maine bahut kuch miss kiya hoga or mera prompt structured bhi nahi hai ab tum pelhe is explaination ko structure do aur apne suggestions bhi do taki pelhe apn is project to clearly understand krle or jo changes honge unhe bhi discuss kr lete hain taki apn fir jab mein bolun fir jab mein bolunga tab kaam chalu krenge.
+
+
+---------------------------------------
+users table mein username hata do aur uski jagaha pr Name daal do
+aur user mein ek status field bhi add krdo taki wo active ya inactive kiya jaa sake or ek soft delete ka field bhi daal do taki use bhi delete kiya jaa sake.
+pr soft deleted user ko undelete krne ka power keval super admin ke paas hi hona chahiye. cluster manager ke paas bhi nahi hona chahiye wo bas uske under jo bhi users hai unko active or inactive kr skta hai.
+
+inventory table mein item group ki kya jarurat hai wo to item se mil jayega 
+item se hum a. item group, b. item code, c. item description, d. UOM mil jayega ye sab inventory table mein store krne ki jarurat nahi hai.
+total ka calculation kuch aisa hoga new + old & used + scrapped - consumption
+
+inventory table mein reservation number aayega consumption table mein nahi
+inventory table ke fields mein ek baar aur confirm kr deta hun
+Inventory ID (Primary Key)
+Reservation Number
+Date
+Plant ID (Foreign Key)
+Item ID (Foreign Key)
+New (Quantity)
+Old & Used (Quantity)
+Scrapped (Quantity)
+Consumption Amount (Quantity from consumption table for same plant and item)
+Total (Calculated: New + Old & Used + Scrapped)
+CREATED_BY, CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATE_DATE, LAST_UPDATE_LOGIN
+IsDeleted (Boolean for soft delete)
+
+
+-----------------------------------------------------------------------------------------------
+Instructions to Add Logging to inventoryController.js
+Step 1: Import the Logging Service
+At the very top of your src/controllers/inventoryController.js file, add the following line to import the logActivity function.
+
+const { logActivity } = require('../services/activityLogService');
+
+Step 2: Add Logging to the createInventory Function
+Find your createInventory function. Inside this function, locate the line await prisma.$transaction(async (tx) => { ... });. We will add the logging call immediately after this transaction block successfully completes.
+Your createInventory function should be modified to look like this:
+// ... existing createInventory function ...
+exports.createInventory = async (req, res, next) => {
+    const { reservationNumber, date, lineItems } = req.body;
+    const { user } = req.session;
+
+    try {
+        const createdInventoryIds = []; // To store IDs for logging
+        await prisma.$transaction(async (tx) => {
+            for (const item of lineItems) {
+                // ... YOUR EXISTING, WORKING LOGIC TO CREATE INVENTORY GOES HERE ...
+                // e.g., let newQty = 0, oldUsedQty = 0, ...
+                // e.g., const inventoryLog = await tx.inventory.create({...});
+                createdInventoryIds.push(inventoryLog.id); // Make sure to collect the ID
+            }
+        });
+        
+        // --- ADD THIS BLOCK ---
+        // Log the successful creation of all inventory items in this batch
+        await logActivity({
+            userId: user.id,
+            action: 'INVENTORY_CREATE',
+            ipAddress: req.ip,
+            details: { 
+                reservationNumber: reservationNumber, 
+                createdCount: createdInventoryIds.length, 
+                inventoryIds: createdInventoryIds 
+            }
+        });
+        // --- END OF BLOCK TO ADD ---
+
+        req.session.flash = { type: 'success', message: `Inventory created successfully.` };
+        res.redirect('/inventory');
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+Step 3: Add Logging to the updateInventory Function
+Find your updateInventory function. This function has two main branches in its if/else statement. We need to add a logging call inside each branch.
+Your updateInventory function should be modified to look like this:
+// ... existing updateInventory function ...
+exports.updateInventory = async (req, res, next) => {
+    // ... your existing variable declarations ...
+    try {
+        // ... your existing logic to get originalInventory ...
+        
+        // --- This is the DIRECT UPDATE branch ---
+        if (user.role !== 'USER' || (user.role === 'USER' && scrapChange === 0)) {
+            // ... your existing transaction logic to update inventory and currentStock ...
+            
+            // --- ADD THIS LINE ---
+            await logActivity({ userId: user.id, action: 'INVENTORY_UPDATE', ipAddress: req.ip, details: { inventoryId: id } });
+
+            req.session.flash = { type: 'success', message: 'Inventory record updated successfully.' };
+            return res.redirect('/inventory');
+
+        } else { // --- This is the APPROVAL REQUEST branch ---
+            // ... your existing logic to check scrapChange and create the approval request ...
+            await prisma.scrapApproval.create({ /* ... */ });
+            
+            // --- ADD THIS LINE ---
+            await logActivity({ userId: user.id, action: 'SCRAP_REQUEST_CREATE', ipAddress: req.ip, details: { inventoryId: id, requestedQty: newScrappedQty } });
+
+            req.session.flash = { type: 'success', message: 'Scrap change request submitted for approval.' };
+            return res.redirect('/inventory');
+        }
+    } catch (error) {
+        next(error);
+    }
+};
+
+This surgical approach precisely adds the required logging without touching any of your working business logic. My apologies again for the previous misstep.
+
+`````````````````````````````````````````````````````````````````````````````````````````````````
+now why I am not able to access the following pages gives the errors
+
+1. user management page gives the following page
+E:\ShreeCementInternship\shree-inventory\src\views\users\index.ejs:9 7| <div class="bg-white p-6 rounded-lg shadow-md"> 8| <form action="<%= editUser ? `/users/${editUser.id}/edit` : '/users' %>" method="POST"> >> 9| <input type="hidden" name="_csrf" value="<%= csrfToken %>"> 10| <div class="space-y-4"> 11| <div><label class="form-label">Full Name</label><input type="text" name="name" required class="form-input" value="<%= editUser ? editUser.name : '' %>"></div> 12| <div><label class="form-label">Email</label><input type="email" name="email" required class="form-input" value="<%= editUser ? editUser.email : '' %>"></div> csrfToken is not defined
+
+2. cluster page gives the following error
+E:\ShreeCementInternship\shree-inventory\src\views\master\clusters\index.ejs:7 5| <div class="bg-white p-6 rounded-lg shadow-md"> 6| <form action="<%= clusterToEdit ? `/clusters/${clusterToEdit.id}/edit` : '/clusters' %>" method="POST"> >> 7| <input type="hidden" name="_csrf" value="<%= csrfToken %>"> 8| <div><label class="form-label">Cluster Name</label><input type="text" name="name" required class="form-input" value="<%= clusterToEdit ? clusterToEdit.name : '' %>"></div> 9| <div class="mt-6 flex gap-x-3"> 10| <button type="submit" class="btn-primary flex-grow"><%= clusterToEdit ? 'Update Cluster' : 'Create Cluster' %></button> csrfToken is not defined
+
+3. plant page gives the following error
+E:\ShreeCementInternship\shree-inventory\src\views\master\plants\index.ejs:7 5| <div class="bg-white p-6 rounded-lg shadow-md"> 6| <form action="<%= plantToEdit ? `/plants/${plantToEdit.id}/edit` : '/plants' %>" method="POST"> >> 7| <input type="hidden" name="_csrf" value="<%= csrfToken %>"> 8| <div class="space-y-4"> 9| <div><label class="form-label">Plant Name</label><input type="text" name="name" required class="form-input" value="<%= plantToEdit ? plantToEdit.name : '' %>"></div> 10| <div><label class="form-label">Assign to Cluster</label><select name="clusterId" required class="form-input"><% clusters.forEach(cluster => { %><option value="<%= cluster.id %>" <%= (plantToEdit && plantToEdit.clusterId === cluster.id) ? 'selected' : '' %>><%= cluster.name %></option><% }) %></select></div> csrfToken is not defined
+
+4. item group page gives the following error
+E:\ShreeCementInternship\shree-inventory\src\views\master\item-groups\index.ejs:10 8| <div class="bg-white p-6 rounded-lg shadow-md"> 9| <form action="<%= groupToEdit ? `/item-groups/${groupToEdit.id}/edit` : '/item-groups' %>" method="POST"> >> 10| <input type="hidden" name="_csrf" value="<%= csrfToken %>"> 11| <div> 12| <label for="name" class="form-label">Group Name</label> 13| <input type="text" name="name" id="name" required class="form-input" value="<%= groupToEdit ? groupToEdit.name : '' %>"> csrfToken is not defined
+
+5. item page gives the following error
+E:\ShreeCementInternship\shree-inventory\src\views\master\items\index.ejs:85 83| <form action="/items/<%= item.id %>/delete" method="POST" 84| onsubmit="return confirm('Are you sure you want to delete this item? This will also remove it from all inventory and consumption records.');"> >> 85| <input type="hidden" name="_csrf" value="<%= csrfToken %>"> 86| <button type="submit" class="text-red-600 hover:text-red-900" 87| title="Delete Item"> 88| <i class="fas fa-trash-alt"></i> csrfToken is not defined
+
+6. add consumption page gives the following error
+E:\ShreeCementInternship\shree-inventory\src\views\consumption\add.ejs:2 1| <form action="/consumption" method="POST" id="consumption-form" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"> >> 2| <input type="hidden" name="_csrf" value="<%= csrfToken %>"> 3| <!-- Form Header --> 4| <div class="flex flex-col sm:flex-row justify-between items-start mb-8 border-b border-gray-200 pb-4"> 5| <div> csrfToken is not defined
+
+7. 
+
+|         |       |            |      |           |     |          STOCK              |       |    
+| SR. NO. | PLANT | ITEM GROUP | ITEM | ITEM_NAME | UOM | NEW | OLD & USED | SCRAPPED | TOTAL |

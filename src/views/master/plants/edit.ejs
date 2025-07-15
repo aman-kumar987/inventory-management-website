@@ -1,0 +1,22 @@
+<div class="max-w-xl mx-auto"><div class="bg-white p-8 rounded-lg shadow-md">
+    <h1 class="text-2xl font-bold text-gray-800 mb-6"><%= title %></h1>
+    <form action="/plants/<%= plant.id %>/edit" method="POST">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="space-y-6">
+            <div>
+                <label for="name" class="form-label">Plant Name</label>
+                <input type="text" name="name" id="name" value="<%= plant.name %>" required class="form-input mt-1">
+            </div>
+            <div>
+                <label for="clusterId" class="form-label">Parent Cluster</label>
+                <select name="clusterId" id="clusterId" required class="form-input mt-1">
+                    <option value="">Select a Cluster</option>
+                    <% clusters.forEach(cluster => { %>
+                        <option value="<%= cluster.id %>" <%= plant.clusterId === cluster.id ? 'selected' : '' %>><%= cluster.name %></option>
+                    <% }) %>
+                </select>
+            </div>
+        </div>
+        <div class="mt-8 flex justify-end gap-x-4"><a href="/plants" class="btn-secondary">Cancel</a><button type="submit" class="btn-primary">Update Plant</button></div>
+    </form>
+</div></div>

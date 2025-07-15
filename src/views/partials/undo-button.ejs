@@ -1,0 +1,9 @@
+<form action="/recovery/undo" method="POST" onsubmit="return confirm('Are you sure you want to restore this record?');">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input type="hidden" name="id" value="<%= id %>">
+    <!-- The 'model' value will be passed in from the parent view -->
+    <input type="hidden" name="model" value="<%= model %>">
+    <button type="submit" class="font-medium text-indigo-600 hover:text-indigo-900 transition-colors">
+        Restore
+    </button>
+</form>

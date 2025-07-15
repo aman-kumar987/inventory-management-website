@@ -1,0 +1,209 @@
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-800"><%= title %></h1>
+    <div class="flex items-center gap-x-3">
+        <!-- NEW EXPORT BUTTON (with permission check) -->
+        <% if (user.role === 'SUPER_ADMIN' || user.role === 'CLUSTER_MANAGER') { %>
+            <a id="export-btn" href="/consumption/export" class="btn-secondary">
+                <i class="fas fa-file-excel mr-2"></i>Export
+            </a>
+        <% } %>
+
+        <% if (user.role !== 'VIEWER') { %>
+            <a href="/consumption/new" class="btn-primary">
+                <i class="fas fa-plus mr-2"></i>Add New Consumption
+            </a>
+        <% } %>
+    </div>
+</div>
+
+<!-- ======================================================== -->
+<!--  UPGRADED FILTER PANEL FOR CONSUMPTION -->
+<!-- ======================================================== -->
+<div class="mb-4 bg-white p-4 rounded-lg shadow-sm border">
+    <div class="flex items-center gap-x-2">
+        <form action="/consumption" method="GET" class="relative flex-grow">
+            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><i class="fas fa-search text-gray-400"></i></div>
+            <input type="text" name="search" placeholder="Search by Item, Serial No, Asset No, PO No..." value="<%= searchTerm %>" class="form-input pl-10 w-full">
+        </form>
+        <button type="submit" class="btn-primary flex-shrink-0">Search</button>
+        <button id="filter-toggle-btn" type="button" class="btn-secondary flex-shrink-0 flex items-center gap-2"
+                data-target-panel="advanced-filters-consumption"
+                data-target-chevron="filter-chevron-consumption">
+            <i class="fas fa-filter"></i> Filters <i id="filter-chevron-consumption" class="fas fa-chevron-down text-xs transition-transform"></i>
+        </button>
+    </div>
+    
+    <div id="advanced-filters-consumption" class="hidden mt-4 pt-4 border-t">
+        <form action="/consumption" method="GET">
+            <input type="hidden" name="search" value="<%= searchTerm %>">
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 items-end">
+                <!-- Date Filter -->
+                <div>
+                    <label class="form-label">Date</label>
+                    <input type="date" name="dateFilter" class="form-input" value="<%= filters.dateFilter || '' %>">
+                </div>
+                <!-- Plant Filter -->
+                <div>
+                    <label class="form-label">Plant</label>
+                    <select name="plantFilter" class="form-input"><option value="">All</option><% plants.forEach(p => { %><option value="<%= p.id %>" <%= filters.plantFilter === p.id ? 'selected' : '' %>><%= p.name %></option><% }) %></select>
+                </div>
+                <!-- Item Group Filter -->
+                <div>
+                    <label class="form-label">Item Group</label>
+                    <select name="itemGroupFilter" class="form-input"><option value="">All</option><% itemGroups.forEach(g => { %><option value="<%= g.id %>" <%= filters.itemGroupFilter === g.id ? 'selected' : '' %>><%= g.name %></option><% }) %></select>
+                </div>
+                <!-- Status Filter -->
+                <div>
+                    <label class="form-label">Status</label>
+                    <select name="statusFilter" class="form-input">
+                        <option value="">All</option>
+                        <option value="true" <%= filters.statusFilter === 'true' ? 'selected' : '' %>>Returnable</option>
+                        <option value="false" <%= filters.statusFilter === 'false' ? 'selected' : '' %>>Not Returnable</option>
+                    </select>
+                </div>
+                <!-- Quantity Filter -->
+                <div>
+                    <label class="form-label">Quantity</label>
+                    <div class="flex items-center w-full border border-1 rounded-xl p-0.5">
+                        <select name="qtyOp" class="font-bold rounded-r-none border-none px-1 py-1.5 rounded-xl w-[55px] flex-shrink-0">
+                            <option value="gt" <%=filters.qtyOp === 'gt' ? 'selected' : '' %>> >= </option>
+                            <option value="lt" <%=filters.qtyOp === 'lt' ? 'selected' : '' %>> <= </option>
+                            <option value="et" <%=filters.qtyOp === 'et' ? 'selected' : '' %>> = </option>
+                        </select>
+                        <input type="number" name="qty" class="inline-block w-full border-none py-1.5 rounded-lg rounded-l-none" value="<%= filters.qty || '' %>">
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-4">
+                <a href="/consumption" class="btn-secondary">Clear Filters</a>
+                <button type="submit" class="btn-primary">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- NEW AND IMPROVED CONSUMPTION HISTORY TABLE -->
+<div class="overflow-x-auto bg-white rounded-md shadow-sm">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="table-header w-1/5">Details</th>
+                <th class="table-header w-2/5">New Item Installed</th>
+                <th class="table-header w-2/5">Old Item Received</th>
+                <th class="table-header text-right w-20">Qty</th>
+                <th class="table-header text-center w-32">Status</th>
+                <% if (user.role !== 'VIEWER') { %>
+            <th class="table-header text-center w-20">Action</th>
+        <% } %>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            <% if (consumptions.length> 0) { %>
+                <% consumptions.forEach(record=> { %>
+                    <tr class="hover:bg-gray-50">
+                        <!-- =============================================== -->
+                        <!--  REFINED "DETAILS" COLUMN                     -->
+                        <!-- =============================================== -->
+                        <td class="px-6 py-4 text-sm align-top">
+                            <!-- Main Detail: Plant Name -->
+                            <div class="font-semibold text-gray-900">
+                                <%= record.plant.name %>
+                            </div>
+                            <!-- Sub Detail: Date -->
+                            <div class="text-gray-500">
+                                <%= new Date(record.date).toLocaleDateString() %>
+                            </div>
+                        </td>
+
+                        <!-- New Item Installed Column -->
+                        <td class="px-6 py-4 text-sm align-top">
+                            <div class="font-medium text-gray-900">
+                                <%= record.item.item_code %>
+                            </div>
+                            <div class="text-gray-500">
+                                <%= record.item.item_description %>
+                            </div>
+                            <div class="text-xs text-gray-400 mt-1">
+                                Asset: <%= record.new_assetNo %> | Serial: <%= record.new_serialNo %> | PO: <%=
+                                            record.new_poNo %>
+                            </div>
+                        </td>
+
+                        <!-- Old Item Received Column -->
+                        <!-- Old Item Received Column (UPDATED) -->
+                        <td class="px-6 py-4 text-sm align-top">
+                            <% if (record.oldAndReceived && record.oldItem) { %>
+                                <!-- Show Item Code and Description, just like the 'New' column -->
+                                <div class="font-medium text-gray-900">
+                                    <%= record.oldItem.item_code %>
+                                </div>
+                                <div class="text-gray-500">
+                                    <%= record.oldItem.item_description || '-' %>
+                                </div>
+
+                                <!-- Show Asset/Serial/PO details for the old item -->
+                                <div class="text-xs text-gray-400 mt-1">
+                                    Asset: <%= record.old_assetNo || 'N/A' %> | Serial: <%= record.old_serialNo || 'N/A'
+                                            %> | PO: <%= record.old_poNo || 'N/A' %>
+                                </div>
+
+                                <!-- Show Fault Remark if it exists -->
+                                <% if(record.old_faultRemark) { %>
+                                    <div class="text-red-600 text-xs mt-1" title="Fault: <%= record.old_faultRemark %>">
+                                        <i class="fas fa-exclamation-triangle fa-fw mr-1"></i>
+                                        <%= record.old_faultRemark %>
+                                    </div>
+                                    <% } %>
+                                        <% } else { %>
+                                            <span class="text-gray-400">-</span>
+                                            <% } %>
+                        </td>
+
+                        <!-- Qty Column -->
+                        <td class="px-6 py-4 text-right text-sm font-bold align-top">
+                            <%= record.quantity %>
+                        </td>
+
+                        <!-- Status (Returnable) Column -->
+                        <td class="px-6 py-4 text-center text-sm align-top">
+                            <% if (record.isReturnable) { %>
+                                <span
+                                    class="status-badge px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Returnable</span>
+                                <% } else { %>
+                                    <span
+                                        class="status-badge px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Not</span></br><span
+                                        class="status-badge px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Returnable</span>
+                                    <% } %>
+                        </td>
+
+                        <% if (user.role !== 'VIEWER') { %>
+                        <td class="px-6 py-4 text-center text-sm font-medium align-top">
+                            <!-- Changed from a button to an anchor tag -->
+                            <a href="/consumption/<%= record.id %>/edit" class="text-indigo-600 hover:text-indigo-900"
+                                title="View & Edit Details">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
+                                        <path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" />
+                                    </svg>
+                            </a>
+                        </td>
+                        <% } %>
+                    </tr>
+                    <% }) %>
+                        <% } else { %>
+                            <tr>
+                                <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                                    No consumption history found.
+                                    <a href="/consumption/new" class="text-indigo-600 hover:underline">Add one now</a>.
+                                </td>
+                            </tr>
+                            <% } %>
+        </tbody>
+    </table>
+</div>
+
+
+<!-- Pagination -->
+<%- include('../partials/pagination', { currentPage, totalPages, baseUrl: '/consumption' , searchTerm, totalItems }) %>
+<script src="/js/filter-toggle.js"></script>
+<script src="/js/export-btn-consumption.js"></script>

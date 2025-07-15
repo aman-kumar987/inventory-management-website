@@ -1,0 +1,47 @@
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <!-- Left side: Add/Edit Form -->
+    <div class="md:col-span-1">
+        <h2 class="text-xl font-bold text-gray-800 mb-4"><%= plantToEdit ? 'Edit Plant' : 'Add New Plant' %></h2>
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <form action="<%= plantToEdit ? `/plants/${plantToEdit.id}/edit` : '/plants' %>" method="POST">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div class="space-y-4">
+                    <div><label class="form-label">Plant Name</label><input type="text" name="name" required class="form-input" value="<%= plantToEdit ? plantToEdit.name : '' %>"></div>
+                    <div><label class="form-label">Assign to Cluster</label><select name="clusterId" required class="form-input"><% clusters.forEach(cluster => { %><option value="<%= cluster.id %>" <%= (plantToEdit && plantToEdit.clusterId === cluster.id) ? 'selected' : '' %>><%= cluster.name %></option><% }) %></select></div>
+                </div>
+                <div class="mt-6 flex gap-x-3">
+                    <button type="submit" class="btn-primary flex-grow"><%= plantToEdit ? 'Update Plant' : 'Create Plant' %></button>
+                    <% if (plantToEdit) { %><a href="/plants" class="btn-secondary">Cancel</a><% } %>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Right side: List of Existing Plants -->
+    <div class="md:col-span-2">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">Existing Plants</h2>
+        <div class="overflow-x-auto bg-white rounded-md shadow-sm">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr><th class="table-header">Plant Name</th><th class="table-header">Cluster</th><th class="table-header text-center">Actions</th></tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <% if (plants.length > 0) { %>
+                        <% plants.forEach(plant => { %>
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium"><%= plant.name %></td>
+                                <td class="px-6 py-4 text-sm text-gray-500"><%= plant.cluster.name %></td>
+                                <td class="px-6 py-4 text-center text-sm font-medium space-x-4">
+                                    <a href="/plants?edit=<%= plant.id %>" class="text-indigo-600 hover:text-indigo-900" title="Edit"><i class="fas fa-pencil-alt"></i></a>
+                                    <form action="/plants/<%= plant.id %>/delete" method="POST" class="inline" onsubmit="return confirm('Are you sure?');"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="text-red-600 hover:text-red-900" title="Delete"><i class="fas fa-trash-alt"></i></button></form>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    <% } else { %>
+                        <tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">No plants found.</td></tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

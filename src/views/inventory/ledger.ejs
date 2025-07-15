@@ -1,0 +1,280 @@
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">
+            <%= title %>
+        </h1>
+        <p class="text-sm text-gray-500">A detailed audit trail of all stock-in transactions.</p>
+    </div>
+    <div class="flex items-center gap-x-3 w-full md:w-auto">
+        <!-- VIEW SELECTOR DROPDOWN -->
+        <div class="flex-grow">
+            <select id="view-selector" class="form-input !py-2">
+                <option value="summary">Consolidated Stock</option>
+                <option value="ledger" selected>Transaction Ledger</option>
+            </select>
+        </div>
+        <% if (user.role==='SUPER_ADMIN' ) { %>
+            <button type="button" id="open-import-modal-btn" class="btn-secondary">
+                <i class="fas fa-file-import mr-2"></i>Import
+            </button>
+            <% } %>
+                <% if (user.role==='SUPER_ADMIN' || user.role==='CLUSTER_MANAGER' ) { %>
+                    <a id="export-btn" href="/inventory/ledger/export" class="btn-secondary flex-shrink-0">
+                        <i class="fas fa-file-excel mr-2"></i>Export
+                    </a>
+                    <% } %>
+                        <% if (user.role !=='VIEWER' ) { %>
+                            <a href="/inventory/new" class="btn-primary flex-shrink-0">Add Stock</a>
+                            <% } %>
+    </div>
+</div>
+
+<!-- ======================================================== -->
+<!-- IMPORT MODAL (Corrected Version) -->
+<!-- ======================================================== -->
+<% if (user.role === 'SUPER_ADMIN') { %>
+<div id="import-inventory-modal" class="hidden relative z-50" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <!-- The backdrop -->
+    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+
+    <div class="fixed inset-0 z-10 overflow-y-auto">
+        <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <!-- The modal panel -->
+            <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl sm:my-8 sm:w-full sm:max-w-lg">
+                <form action="/inventory/import" method="POST" enctype="multipart/form-data">
+                    
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <p style="color:red;">CSRF Token in Form: <%= csrfToken %></p>
+                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                                <i class="fas fa-file-excel text-blue-600"></i>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                                <h3 class="text-lg font-medium leading-6 text-gray-900" id="modal-title">Sync/Add Inventory from Excel</h3>
+                                <div class="mt-2">
+                                    <p class="text-sm text-gray-500 mb-3">
+                                        Select an .xlsx file to bulk-upload new items. The system will automatically create any missing masters.
+                                    </p>
+                                    <p class="text-xs text-gray-500">Required Columns: <code class="text-xs bg-gray-100 p-1 rounded">PLANT</code>, <code class="text-xs bg-gray-100 p-1 rounded">ITEM GROUP</code>, <code class="text-xs bg-gray-100 p-1 rounded">ITEM</code>, <code class="text-xs bg-gray-100 p-1 rounded">ITEM_NAME</code>, <code class="text-xs bg-gray-100 p-1 rounded">UOM</code>, <code class="text-xs bg-gray-100 p-1 rounded">NEW</code>, <code class="text-xs bg-gray-100 p-1 rounded">OLD & USED</code>, <code class="text-xs bg-gray-100 p-1 rounded">SCRAPPED</code>.</p>
+                                    
+                                    <!-- ================================================== -->
+                                    <!--  THE FIX: Simplified and reliable file input       -->
+                                    <!-- ================================================== -->
+                                    <input type="file" name="importFile" accept=".xlsx" required class="form-input mt-4">
+                                
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                        <button type="submit" class="btn-primary w-full sm:w-auto">Upload and Process</button>
+                        <button type="button" id="cancel-import-btn" class="btn-secondary mt-3 sm:mt-0 sm:mr-3 w-full sm:w-auto">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<% } %>
+
+<!-- ======================================================== -->
+<!--  FINAL FILTER PANEL (with correct toggle logic) -->
+<!-- ======================================================== -->
+<div class="mb-4 bg-white p-4 rounded-lg shadow-sm border">
+    <!-- Top row with search and filter toggle -->
+    <div class="flex items-center gap-x-2">
+        <form action="/inventory/ledger" method="GET" class="relative flex-grow flex gap-2">
+            <input type="text" name="search" placeholder="Search by Res. No, Item..."
+                value="<%= filters.search || '' %>" class="form-input pl-10 w-full">
+                <button type="submit" class="btn-primary flex-shrink-0">Search</button>
+        </form>
+
+        <!-- Corrected Filter Toggle Button -->
+        <button id="filter-toggle-btn" type="button" class="btn-secondary flex-shrink-0 flex items-center gap-2"
+            data-target-panel="advanced-filters-ledger" data-target-chevron="filter-chevron-ledger">
+            <i class="fas fa-filter"></i> Filters <i id="filter-chevron-ledger"
+                class="fas fa-chevron-down text-xs transition-transform"></i>
+        </button>
+    </div>
+
+    <!-- Advanced Filter Panel (Collapsible) -->
+    <div id="advanced-filters-ledger" class="hidden mt-4 pt-4 border-t">
+        <form action="/inventory/ledger" method="GET">
+            <input type="hidden" name="search" value="<%= filters.search || '' %>"> <!-- Preserve search term -->
+            <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-end">
+                <!-- Dropdown Filters -->
+                <div>
+                    <label class="form-label">Plant</label>
+                    <select name="plantFilter" class="form-input">
+                        <option value="">All Plants</option>
+                        <% plants.forEach(p=> { %>
+                            <option value="<%= p.id %>" <%=filters.plantFilter===p.id ? 'selected' : '' %>><%= p.name %>
+                            </option>
+                            <% }) %>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Item Group</label>
+                    <select name="itemGroupFilter" class="form-input">
+                        <option value="">All Groups</option>
+                        <% itemGroups.forEach(g=> { %>
+                            <option value="<%= g.id %>" <%=filters.itemGroupFilter===g.id ? 'selected' : '' %>><%=
+                                    g.name %>
+                            </option>
+                            <% }) %>
+                    </select>
+                </div>
+
+                <!-- Quantity Filters with your custom styling -->
+                <div>
+                    <label class="form-label">New Qty</label>
+                    <div class="flex items-center w-full border border-1 rounded-xl p-0.5">
+                        <select name="newQtyOp"
+                            class="font-bold rounded-r-none border-none px-1 py-1.5 rounded-xl w-[55px] flex-shrink-0">
+                            <option value="gt" <%=filters.newQtyOp==='gt' ? 'selected' : '' %>> >= </option>
+                            <option value="lt" <%=filters.newQtyOp==='lt' ? 'selected' : '' %>> <= </option>
+                            <option value="et" <%=filters.newQtyOp==='et' ? 'selected' : '' %>> = </option>
+                        </select>
+                        <input type="number" name="newQty"
+                            class="inline-block w-full border-none py-1.5 rounded-lg rounded-l-none"
+                            value="<%= filters.newQty || '' %>">
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label">Old/Used Qty</label>
+                    <div class="flex items-center w-full border border-1 rounded-xl p-0.5">
+                        <select name="oldQtyOp"
+                            class="font-bold rounded-r-none border-none px-1 py-1.5 rounded-xl w-[55px] flex-shrink-0">
+                            <option value="gt" <%=filters.oldQtyOp==='gt' ? 'selected' : '' %>> >= </option>
+                            <option value="lt" <%=filters.oldQtyOp==='lt' ? 'selected' : '' %>> <= </option>
+                            <option value="et" <%=filters.oldQtyOp==='et' ? 'selected' : '' %>> = </option>
+                        </select>
+                        <input type="number" name="oldQty"
+                            class="inline-block w-full border-none py-1.5 rounded-lg rounded-l-none"
+                            value="<%= filters.oldQty || '' %>">
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label">Scrapped Qty</label>
+                    <div class="flex items-center w-full border border-1 rounded-xl p-0.5">
+                        <select name="scrappedQtyOp"
+                            class="font-bold rounded-r-none border-none px-1 py-1.5 rounded-xl w-[55px] flex-shrink-0">
+                            <option value="gt" <%=filters.scrappedQtyOp==='gt' ? 'selected' : '' %>> >= </option>
+                            <option value="lt" <%=filters.scrappedQtyOp==='lt' ? 'selected' : '' %>> <= </option>
+                            <option value="et" <%=filters.scrappedQtyOp==='et' ? 'selected' : '' %>> = </option>
+                        </select>
+                        <input type="number" name="scrappedQty"
+                            class="inline-block w-full border-none py-1.5 rounded-lg rounded-l-none"
+                            value="<%= filters.scrappedQty || '' %>">
+                    </div>
+                </div>
+            </div>
+            <!-- Action Buttons -->
+            <div class="flex justify-end gap-2 mt-4">
+                <a href="/inventory/ledger" class="btn-secondary">Clear Filters</a>
+                <button type="submit" class="btn-primary">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+
+<!-- ======================================================== -->
+<!--  UPGRADED TRANSACTION LEDGER TABLE -->
+<!-- ======================================================== -->
+<div class="overflow-x-auto bg-white rounded-md shadow-sm">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="table-header">Details</th>
+                <!-- Item column width increased -->
+                <th class="table-header w-2/5">Item</th>
+                <!-- Quantity headers are now centered -->
+                <th class="table-header text-center w-20">New</th>
+                <th class="table-header text-center w-20">Old</th>
+                <th class="table-header text-center w-20">Scrap</th>
+                <th class="table-header text-center w-24 font-bold">Subtotal</th>
+                <% if (user.role !=='VIEWER' ) { %>
+                    <th class="table-header text-center w-20">Action</th>
+                    <% } %>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            <% if (data.length> 0) { %>
+                <% data.forEach(record=> { %>
+                    <tr class="hover:bg-gray-50">
+                        <!-- Details Column -->
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <div class="font-medium text-gray-900">
+                                <%= record.plant.name %>
+                            </div>
+                            <div class="text-gray-500">Res: <%= record.reservationNumber %>
+                            </div>
+                            <div class="text-xs text-gray-400 mt-1">
+                                <%= new Date(record.date).toLocaleDateString() %>
+                            </div>
+                        </td>
+
+                        <!-- Item Column -->
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <div class="font-medium text-gray-900">
+                                <%= record.item.item_code %>
+                            </div>
+                            <div class="text-gray-500 max-w-sm truncate" title="<%= record.item.item_description %>">
+                                <%= record.item.item_description || '-' %>
+                            </div>
+                            <div class="text-xs text-gray-400">Group: <%= record.item.itemGroup.name %>
+                            </div>
+                        </td>
+
+                        <!-- Quantity columns are now centered -->
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-green-600 font-medium">
+                            <%= record.newQty %>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-blue-600 font-medium">
+                            <%= record.oldUsedQty %>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-orange-500 font-medium">
+                            <%= record.scrappedQty %>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-gray-900">
+                            <%= record.newQty + record.oldUsedQty + record.scrappedQty %>
+                        </td>
+
+                        <!-- Action column content is now centered -->
+                        <% if (user.role !=='VIEWER' ) { %>
+                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                <!-- FIX: Add ?returnUrl=/inventory/ledger to the link -->
+                                <a href="/inventory/<%= record.id %>/edit?returnUrl=/inventory/ledger"
+                                    class="text-gray-400 hover:text-indigo-600 inline-block" title="Edit Record">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
+                                        fill="currentColor">
+                                        <path
+                                            d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
+                                        <path fill-rule="evenodd"
+                                            d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
+                                            clip-rule="evenodd" />
+                                    </svg>
+                                </a>
+                            </td>
+                            <% } %>
+                    </tr>
+                    <% }) %>
+                        <% } else { %>
+                            <tr>
+                                <td colspan="7" class="px-6 py-4 text-center text-gray-500">No transactions found.</td>
+                            </tr>
+                            <% } %>
+        </tbody>
+    </table>
+</div>
+
+
+<!-- Pagination -->
+<%- include('../partials/pagination', { currentPage, totalPages, baseUrl: '/inventory/ledger' , searchTerm }) %>
+    <script src="/js/filter-toggle.js"></script>
+    <script src="/js/view-switcher-script.js"></script>
+    <script src="/js/export-btn.js"></script>
+    <script src="/js/import-modal-ledger.js"></script>

@@ -1,0 +1,42 @@
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <!-- Left side: Add/Edit Form -->
+    <div class="md:col-span-1">
+        <h2 class="text-xl font-bold text-gray-800 mb-4"><%= clusterToEdit ? 'Edit Cluster' : 'Add New Cluster' %></h2>
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <form action="<%= clusterToEdit ? `/clusters/${clusterToEdit.id}/edit` : '/clusters' %>" method="POST">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div><label class="form-label">Cluster Name</label><input type="text" name="name" required class="form-input" value="<%= clusterToEdit ? clusterToEdit.name : '' %>"></div>
+                <div class="mt-6 flex gap-x-3">
+                    <button type="submit" class="btn-primary flex-grow"><%= clusterToEdit ? 'Update Cluster' : 'Create Cluster' %></button>
+                    <% if (clusterToEdit) { %><a href="/clusters" class="btn-secondary">Cancel</a><% } %>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Right side: List of Existing Clusters -->
+    <div class="md:col-span-2">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">Existing Clusters</h2>
+        <div class="overflow-x-auto bg-white rounded-md shadow-sm">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr><th class="table-header">Cluster Name</th><th class="table-header text-center">Actions</th></tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <% if (clusters.length > 0) { %>
+                        <% clusters.forEach(cluster => { %>
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium"><%= cluster.name %></td>
+                                <td class="px-6 py-4 text-center text-sm font-medium space-x-4">
+                                    <a href="/clusters?edit=<%= cluster.id %>" class="text-indigo-600 hover:text-indigo-900" title="Edit"><i class="fas fa-pencil-alt"></i></a>
+                                    <form action="/clusters/<%= cluster.id %>/delete" method="POST" class="inline" onsubmit="return confirm('Are you sure?');"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="text-red-600 hover:text-red-900" title="Delete"><i class="fas fa-trash-alt"></i></button></form>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    <% } else { %>
+                        <tr><td colspan="2" class="px-6 py-4 text-center text-gray-500">No clusters found.</td></tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
