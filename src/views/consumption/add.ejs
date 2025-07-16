@@ -48,13 +48,16 @@
                 <% if (user.role==='USER' ) { %><input type="text" value="<%= plants[0]?.name || 'Your Plant' %>"
                         disabled class="form-input form-input-disabled"><input type="hidden"
                         name="lineItems[0][plantId]" value="<%= user.plantId %>">
-                    <% } else { %><select name="lineItems[0][plantId]" required class="form-input">
-                            <option value="">Select Plant</option>
-                            <% plants.forEach(plant=> { %><option value="<%= plant.id %>">
-                                    <%= plant.name %>
-                                </option>
-                                <% }) %>
-                        </select>
+                    <% } else { %>
+                        <div class="relative plant-search-wrapper">
+                            <input type="text" class="form-input plant-search-input" placeholder="Search plant..."
+                                autocomplete="off">
+                            <input type="hidden" data-name="plantId" class="selected-plant-id">
+                            <ul
+                                class="plant-search-results absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
+                            </ul>
+                        </div>
+
                         <% } %>
             </div>
             <div><label class="form-label">Consumption Location</label><input type="text" name="lineItems[0][location]"
@@ -80,14 +83,17 @@
                 </label>
             </div>
             <div class="old-received-fields hidden mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label class="form-label">Item Code (Old)</label><select name="lineItems[0][old_itemCode]"
-                        data-required="true" class="form-input item-select-template" placeholder="Search old item...">
-                        <option value="">Select Item</option>
-                        <% items.forEach(item=> { %><option value="<%= item.id %>">
-                                <%= item.item_code %> - <%= item.item_description %>
-                            </option>
-                            <% }) %>
-                    </select></div>
+                <div>
+                    <div class="relative item-search-wrapper-old">
+                        <label class="form-label">Item Code (Old)</label>
+                        <input type="text" class="form-input item-search-input-old" placeholder="Search old item..."
+                            autocomplete="off">
+                        <input type="hidden" data-name="old_itemCode" class="selected-item-id-old" data-required="true">
+                        <ul
+                            class="item-search-results-old absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
+                        </ul>
+                    </div>
+                </div>
                 <div><label class="form-label">Asset No. (Old)</label><input type="text"
                         name="lineItems[0][old_assetNo]" class="form-input"></div>
                 <div><label class="form-label">Serial No. (Old)</label><input type="text"
@@ -103,14 +109,17 @@
         <div class="mt-8 pt-6 border-t">
             <h3 class="text-lg font-semibold text-gray-800">New Installation Details</h3>
             <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div><label class="form-label">Item Code (New)</label><select name="lineItems[0][new_itemCode]" required
-                        class="form-input item-select-template" placeholder="Search new item...">
-                        <option value="">Select Item</option>
-                        <% items.forEach(item=> { %><option value="<%= item.id %>">
-                                <%= item.item_code %> - <%= item.item_description %>
-                            </option>
-                            <% }) %>
-                    </select></div>
+                <div>
+                    <div class="relative item-search-wrapper">
+                        <label class="form-label">Item Code (New)</label>
+                        <input type="text" class="form-input item-search-input" placeholder="Search item..."
+                            autocomplete="off">
+                        <input type="hidden" data-name="new_itemCode" class="selected-item-id">
+                        <ul
+                            class="item-search-results absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
+                        </ul>
+                    </div>
+                </div>
                 <div><label class="form-label">Asset No. (New)</label><input type="text"
                         name="lineItems[0][new_assetNo]" required class="form-input"></div>
                 <div><label class="form-label">Serial No. (New)</label><input type="text"
@@ -132,5 +141,12 @@
         </div>
     </div>
 </template>
+<script id="item-list-json" type="application/json">
+    <%- JSON.stringify(items) %>
+</script>
+
+<script id="plant-list-json" type="application/json">
+    <%- JSON.stringify(plants) %>
+</script>
 
 <script src="/js/consumption-form.js"></script>

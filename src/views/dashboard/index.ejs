@@ -1,3 +1,75 @@
-<!-- src/views/dashboard/index.ejs -->
-<h1 class="text-2xl font-bold">Welcome to the Dashboard</h1>
-<p>You are logged in.</p>
+<!-- ======================================================== -->
+<!--  DASHBOARD FILTER BAR -->
+<!-- ======================================================== -->
+<div class="mb-6 p-4 bg-white rounded-lg shadow-sm border">
+    <form action="/dashboard" method="GET" id="dashboard-filter-form"
+        class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+        <!-- Plant Filter -->
+        <div>
+            <label for="plantId" class="form-label">Plant</label>
+            <% if (user.role==='USER' || user.role==='VIEWER' ) { %>
+                <input type="text" class="form-input" disabled value="<%= accessiblePlants[0]?.name || 'Your Plant' %>">
+                <input type="hidden" name="plantId" value="<%= accessiblePlants[0]?.id %>">
+                <% } else { %>
+                    <div class="relative w-full">
+                        <input id="plant-search-input" type="text" class="form-input plant-search-input"
+                            placeholder="Search plant..." autocomplete="off" value="<%= accessiblePlants.find(p => p.id === selectedPlantId)?.name || '' %>">
+                        <input type="hidden" id="selected-plant-id" name="plantId" value="<%= selectedPlantId || '' %>">
+                        <ul id="plant-search-results"
+                            class="absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
+                        </ul>
+                    </div>
+                    <% } %>
+
+        </div>
+
+        <!-- Data Type Filter -->
+        <div>
+            <label for="dataType" class="form-label">Show Stats For</label>
+            <select name="dataType" id="dataType" class="form-input">
+                <option value="netStock" <%=dataType==='netStock' ? 'selected' : '' %>>Inventory</option>
+                <option value="consumed" <%=dataType==='consumed' ? 'selected' : '' %>>Consumption</option>
+                <option value="net" <%=dataType==='net' ? 'selected' : '' %>>Inventory - Consumption</option>
+
+            </select>
+        </div>
+
+        <!-- Submit Button -->
+        <div class="flex">
+            <button type="submit" class="btn-primary w-full">Apply Filters</button>
+        </div>
+    </form>
+</div>
+
+<!-- ======================================================== -->
+<!--  STATISTICS CARDS -->
+<!-- ======================================================== -->
+<div>
+    <h2 class="text-xl font-semibold text-gray-700 mb-4">
+        <%= dataTitle %>
+    </h2>
+    <% if (cardData.length> 0) { %>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            <% cardData.forEach(card=> { %>
+                <div
+                    class="bg-white p-6 rounded-lg shadow-lg text-center transform hover:-translate-y-1 transition-transform">
+                    <h3 class="text-lg font-semibold text-gray-500">
+                        <%= card.name %>
+                    </h3>
+                    <p class="text-5xl font-bold text-indigo-600 mt-2">
+                        <%= card.value %>
+                    </p>
+                </div>
+                <% }) %>
+        </div>
+        <% } else { %>
+            <div class="text-center p-10 bg-white rounded-lg shadow">
+                <p class="text-gray-500">No data available for the selected filters.</p>
+            </div>
+            <% } %>
+</div>
+
+<script id="plant-list-json" type="application/json">
+    <%- JSON.stringify(accessiblePlants) %>
+</script>
+<script src="/js/dashboard.js"></script>

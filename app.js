@@ -96,7 +96,7 @@ const approvalRoutes = require('./src/routes/approvalRoutes');
 const recoveryRoutes = require('./src/routes/recoveryRoutes');
 const logRoutes = require('./src/routes/logRoutes');
 const clusterUserRoutes = require('./src/routes/clusterUserRoutes');
-
+const dashboardRoutes = require('./src/routes/dashboardRoutes');
 app.use('/', authRoutes);
 app.use('/users', userRoutes);
 app.use('/clusters', clusterRoutes);
@@ -109,6 +109,7 @@ app.use('/consumption', consumptionRoutes);
 app.use('/recovery', recoveryRoutes);
 app.use('/admin/logs', logRoutes);
 app.use('/cluster/users', clusterUserRoutes);
+app.use('/dashboard', dashboardRoutes);
 
 // --- 8. CORE APP ROUTES ---
 app.get('/', (req, res) => {
