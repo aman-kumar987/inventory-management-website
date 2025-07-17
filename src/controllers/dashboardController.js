@@ -36,7 +36,7 @@ exports.showDashboard = async (req, res, next) => {
         let dataTitle = '';
         let cardData = [];
 
-        // Step 3: Aggregation based on filter
+        // Step 3: Aggregation filter base
         const filter = {
             isDeleted: false,
             item: { isDeleted: false }
@@ -48,6 +48,7 @@ exports.showDashboard = async (req, res, next) => {
             filter.plant = { clusterId: user.clusterId };
         }
 
+        // ========== CASE 1: Net Available Stock ==========
         if (dataType === 'netStock') {
             dataTitle = 'Net Available Stock';
 
@@ -83,28 +84,100 @@ exports.showDashboard = async (req, res, next) => {
                 value: d._sum.totalQty
             }));
 
-        } else {
-            // Other types: new, oldUsed, scrapped, consumed
-            const typeMap = {
-                new: { field: 'newQty', title: 'Total New Stock', table: 'inventory' },
-                oldUsed: { field: 'oldUsedQty', title: 'Total Old/Used Stock', table: 'inventory' },
-                scrapped: { field: 'scrappedQty', title: 'Total Scrapped Stock', table: 'inventory' },
-                consumed: { field: 'quantity', title: 'Total Consumed', table: 'consumption' }
-            };
+            // ========== CASE 2: Inventory - Consumption ==========
+        } else if (dataType === 'inventoryConsumptionDiff') {
+            dataTitle = 'Inventory - Consumption';
 
-            const { field, title, table } = typeMap[dataType];
-            dataTitle = title;
-
-            const whereClause = {
-                ...filter,
-                itemGroupId: { not: null }
-            };
-
-            const aggregationResult = await prisma[table].groupBy({
-                by: ['itemGroupId'],
-                where: whereClause,
-                _sum: { [field]: true }
+            // Step 1: Fetch inventory grouped by itemGroupId
+            const inventory = await prisma.currentStock.findMany({
+                where: {
+                    ...filter,
+                    item: { isDeleted: false, itemGroup: { isDeleted: false } }
+                },
+                include: {
+                    item: {
+                        select: { itemGroupId: true }
+                    }
+                }
             });
+
+            const inventoryGrouped = {};
+            inventory.forEach(entry => {
+                const groupId = entry.item.itemGroupId;
+                if (groupId) {
+                    inventoryGrouped[groupId] = (inventoryGrouped[groupId] || 0) + entry.totalQty;
+                }
+            });
+
+            // Step 2: Fetch consumption grouped by itemGroupId
+            const consumption = await prisma.consumption.findMany({
+                where: {
+                    ...filter,
+                    item: { isDeleted: false, itemGroup: { isDeleted: false } }
+                },
+                include: {
+                    item: {
+                        select: { itemGroupId: true }
+                    }
+                }
+            });
+
+            const consumptionGrouped = {};
+            consumption.forEach(entry => {
+                const groupId = entry.item.itemGroupId;
+                if (groupId) {
+                    consumptionGrouped[groupId] = (consumptionGrouped[groupId] || 0) + entry.quantity;
+                }
+            });
+
+            // Step 3: Combine both groups
+            const allGroupIds = new Set([
+                ...Object.keys(inventoryGrouped),
+                ...Object.keys(consumptionGrouped)
+            ]);
+
+            const itemGroups = await prisma.itemGroup.findMany({
+                where: { id: { in: [...allGroupIds] } }
+            });
+
+            const itemGroupMap = new Map(itemGroups.map(g => [g.id, g.name]));
+
+            cardData = Array.from(allGroupIds).map(groupId => {
+                const inventoryQty = inventoryGrouped[groupId] || 0;
+                const consumedQty = consumptionGrouped[groupId] || 0;
+                return {
+                    name: itemGroupMap.get(groupId) || 'Unknown Group',
+                    value: inventoryQty - consumedQty
+                };
+            });
+        // ========== CASE 3: Total Consumed ==========
+        } else {
+            dataTitle = 'Total Consumed';
+
+            const consumptions = await prisma.consumption.findMany({
+                where: {
+                    ...filter,
+                    item: { isDeleted: false, itemGroup: { isDeleted: false } }
+                },
+                include: {
+                    item: {
+                        select: { itemGroupId: true }
+                    }
+                }
+            });
+
+            const grouped = consumptions.reduce((acc, entry) => {
+                if (entry.item.itemGroupId) {
+                    const groupId = entry.item.itemGroupId;
+                    acc[groupId] = (acc[groupId] || 0) + entry.quantity;
+                }
+                return acc;
+            }, {});
+
+            const aggregationResult = Object.entries(grouped).map(([itemGroupId, sum]) => ({
+                itemGroupId,
+                _sum: { quantity: sum }
+            }));
 
             const itemGroupIds = aggregationResult.map(d => d.itemGroupId);
             const itemGroups = await prisma.itemGroup.findMany({ where: { id: { in: itemGroupIds } } });
@@ -112,7 +185,7 @@ exports.showDashboard = async (req, res, next) => {
 
             cardData = aggregationResult.map(d => ({
                 name: itemGroupMap.get(d.itemGroupId) || 'Unknown Group',
-                value: d._sum[field] || 0
+                value: d._sum.quantity || 0
             }));
         }
 

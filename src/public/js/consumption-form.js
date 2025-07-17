@@ -95,9 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const allBlocks = container.querySelectorAll('.line-item-block');
         allBlocks.forEach((block, index) => {
             const numberSpan = block.querySelector('.item-number');
-            if (numberSpan) {
-                numberSpan.textContent = index + 1;
-            }
+            if (numberSpan) numberSpan.textContent = index + 1;
 
             // Rename fields
             block.querySelectorAll('[name]').forEach(input => {
@@ -123,12 +121,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (toggle) {
             const block = toggle.closest('.line-item-block');
             const fieldsToShow = block.querySelector('.old-received-fields');
-            const requiredSelect = fieldsToShow.querySelector('[data-required="true"]');
+            const requiredSelect = block.querySelector('.selected-item-id-old');
 
             const isChecked = toggle.checked;
             fieldsToShow.classList.toggle('hidden', !isChecked);
+
+            // Set the `required` attribute only if checkbox is checked
             if (requiredSelect) {
-                requiredSelect.required = isChecked;
+                if (isChecked) {
+                    requiredSelect.setAttribute('required', 'required');
+                    requiredSelect.dataset.required = 'true';
+                } else {
+                    requiredSelect.removeAttribute('required');
+                    requiredSelect.dataset.required = 'false';
+                }
             }
         }
     });

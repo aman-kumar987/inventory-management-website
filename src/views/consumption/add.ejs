@@ -52,7 +52,7 @@
                         <div class="relative plant-search-wrapper">
                             <input type="text" class="form-input plant-search-input" placeholder="Search plant..."
                                 autocomplete="off">
-                            <input type="hidden" data-name="plantId" class="selected-plant-id">
+                            <input type="hidden" name="lineItems[0][plantId]" data-name="plantId" class="selected-plant-id">
                             <ul
                                 class="plant-search-results absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
                             </ul>
@@ -88,7 +88,7 @@
                         <label class="form-label">Item Code (Old)</label>
                         <input type="text" class="form-input item-search-input-old" placeholder="Search old item..."
                             autocomplete="off">
-                        <input type="hidden" data-name="old_itemCode" class="selected-item-id-old" data-required="true">
+                        <input type="hidden" name="lineItems[0][old_itemCode]" data-name="old_itemCode" class="selected-item-id-old" data-required="true">
                         <ul
                             class="item-search-results-old absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
                         </ul>
@@ -114,7 +114,7 @@
                         <label class="form-label">Item Code (New)</label>
                         <input type="text" class="form-input item-search-input" placeholder="Search item..."
                             autocomplete="off">
-                        <input type="hidden" data-name="new_itemCode" class="selected-item-id">
+                        <input type="hidden" name="lineItems[0][new_itemCode]" data-name="new_itemCode" class="selected-item-id">
                         <ul
                             class="item-search-results absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
                         </ul>
