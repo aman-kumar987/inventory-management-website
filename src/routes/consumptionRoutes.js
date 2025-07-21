@@ -8,7 +8,6 @@ const canView = isAuthenticated;
 const canAdd = hasRole([ROLES.SUPER_ADMIN, ROLES.CLUSTER_MANAGER, ROLES.USER]);
 const canExport = hasRole([ROLES.SUPER_ADMIN, ROLES.CLUSTER_MANAGER]);
 
-router.use(isAuthenticated);
 // Route to view consumption history
 router.get('/', consumptionController.listConsumptions);
 

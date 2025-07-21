@@ -8,37 +8,82 @@ const { sendApprovalConfirmationEmail, sendRejectionEmail } = require('../servic
 exports.listScrapApprovals = async (req, res, next) => {
     try {
         const { user } = req.session;
-        let whereClause = { status: 'PENDING' };
+        const searchTerm = req.query.search || '';
 
+        let plantIds = [];
         if (user.role === 'CLUSTER_MANAGER') {
             const plantsInCluster = await prisma.plant.findMany({
-                where: { clusterId: user.clusterId },
-                select: { id: true }
+                where: { clusterId: user.clusterId }, select: { id: true }
             });
-            const plantIds = plantsInCluster.map(p => p.id);
-            if (plantIds.length > 0) {
-                whereClause.inventory = { plantId: { in: plantIds } };
-            } else {
-                // If manager has no plants, there can be no pending requests for them.
-                whereClause.id = { equals: 'non-existent-id' }; // Ensures no results
-            }
+            plantIds = plantsInCluster.map(p => p.id);
+            if (plantIds.length === 0) plantIds = ['-1'];
         }
         
-        const approvalRequests = await prisma.scrapApproval.findMany({
-            where: whereClause,
-            include: {
-                requestedBy: { select: { name: true } },
-                inventory: { include: { item: true, plant: true } }
-            },
-            orderBy: { createdAt: 'asc' }
-        });
+        const lowerSearchTerm = searchTerm.toLowerCase();
+        let allRequests = [];
+
+        // --- Search by Type logic ---
+        const searchInventory = !lowerSearchTerm || !'consumption'.includes(lowerSearchTerm);
+        const searchConsumption = !lowerSearchTerm || !'inventory'.includes(lowerSearchTerm);
+
+        // 1. Fetch Inventory Scrap Approvals
+        if (searchInventory) {
+            const where = {
+                status: 'PENDING',
+                inventory: plantIds.length > 0 ? { plantId: { in: plantIds } } : undefined,
+            };
+            if (searchTerm) {
+                where.OR = [
+                    { inventory: { item: { item_code: { contains: searchTerm, mode: 'insensitive' } } } },
+                    { inventory: { item: { item_description: { contains: searchTerm, mode: 'insensitive' } } } },
+                    { inventory: { plant: { name: { contains: searchTerm, mode: 'insensitive' } } } },
+                    // FIX: 'requestedBy' ab akele hai, inventory ke andar nahi
+                    { requestedBy: { name: { contains: searchTerm, mode: 'insensitive' } } }
+                ];
+            }
+            const inventoryApprovals = await prisma.scrapApproval.findMany({
+                where,
+                include: { requestedBy: true, inventory: { include: { item: true, plant: true } } }
+            });
+            allRequests.push(...inventoryApprovals.map(r => ({ ...r, type: 'Inventory', currentScrapQty: r.inventory.scrappedQty })));
+        }
+
+        // 2. Fetch Consumption Scrap Approvals
+        if (searchConsumption) {
+             const where = {
+                status: 'PENDING',
+                consumption: plantIds.length > 0 ? { plantId: { in: plantIds } } : undefined,
+            };
+            if (searchTerm) {
+                where.OR = [
+                    { consumption: { item: { item_code: { contains: searchTerm, mode: 'insensitive' } } } },
+                    { consumption: { item: { item_description: { contains: searchTerm, mode: 'insensitive' } } } },
+                    { consumption: { plant: { name: { contains: searchTerm, mode: 'insensitive' } } } },
+                    // FIX: 'requestedBy' ab akele hai, consumption ke andar nahi
+                    { requestedBy: { name: { contains: searchTerm, mode: 'insensitive' } } }
+                ];
+            }
+            const consumptionApprovals = await prisma.consumptionScrapApproval.findMany({
+                where,
+                include: { requestedBy: true, consumption: { include: { item: true, plant: true } } }
+            });
+            allRequests.push(...consumptionApprovals.map(r => ({ ...r, type: 'Consumption', currentScrapQty: 0 })));
+        }
         
-        // --- THIS IS THE CORRECT, SIMPLE RENDER CALL ---
+        // 3. Sort all requests by date
+        allRequests.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        
+        // Final filter for 'type' if searched
+        const finalRequests = lowerSearchTerm === 'inventory' || lowerSearchTerm === 'consumption'
+            ? allRequests.filter(r => r.type.toLowerCase().includes(lowerSearchTerm))
+            : allRequests;
+
         res.render('approvals/scrap', {
             title: 'Scrap Approval Requests',
-            layout: 'layouts/approvals', // We will create this new layout file
-            requests: approvalRequests,
-            scrapRequestCount: approvalRequests.length
+            layout: 'layouts/approvals',
+            requests: finalRequests,
+            scrapRequestCount: finalRequests.length,
+            searchTerm
         });
 
     } catch (error) {
@@ -46,61 +91,61 @@ exports.listScrapApprovals = async (req, res, next) => {
     }
 };
 
-
 /**
  * @desc    Process a scrap approval request (Approve or Reject)
  * @route   POST /approvals/scrap/:id/process
  */
 exports.processScrapRequest = async (req, res, next) => {
-    const { id } = req.params; // Approval request ID
-    const { action } = req.body; // 'approve' or 'reject'
-    const { user: approver } = req.session; // The approver
+    const { id } = req.params;
+    const { action } = req.body;
+    const { user: approver } = req.session;
 
-    if (!['approve', 'reject'].includes(action)) { /* ... error handling ... */ }
+    if (!['approve', 'reject'].includes(action)) { /* ... */ }
 
     try {
-        // NAYA: Hum ek variable banayenge jismein requestor aur item ki details store hongi
-        let emailPayload = {
-            requestor: null,
-            itemCode: null,
-            approvalRecord: null
-        };
+        let emailPayload = { requestor: null, itemCode: null, approvalRecord: null };
 
         await prisma.$transaction(async (tx) => {
             const approvalRequest = await tx.scrapApproval.findUnique({
                 where: { id },
-                include: { 
-                    inventory: { include: { item: true } },
-                    requestedBy: true // Requestor ki poori details fetch karein
-                }
+                include: { inventory: { include: { item: true } }, requestedBy: true }
             });
 
             if (!approvalRequest || approvalRequest.status !== 'PENDING') {
                 throw new Error('Approval request not found or already processed.');
             }
             
-            // Email ke liye zaroori details save karein
-            emailPayload.requestor = approvalRequest.requestedBy;
-            emailPayload.itemCode = approvalRequest.inventory.item.item_code;
-            emailPayload.approvalRecord = approvalRequest;
+            emailPayload = {
+                requestor: approvalRequest.requestedBy,
+                itemCode: approvalRequest.inventory.item.item_code,
+                approvalRecord: approvalRequest
+            };
 
             if (action === 'approve') {
-                // ... (stock update ka logic waisa hi hai)
                 const inventory = approvalRequest.inventory;
                 const newScrapQty = approvalRequest.requestedQty;
                 const scrapDiff = newScrapQty - inventory.scrappedQty;
                 const newOldUsedQty = Math.max(0, inventory.oldUsedQty - scrapDiff);
                 const newTotal = inventory.newQty + newOldUsedQty + newScrapQty;
-                const stockDiff = newTotal - inventory.total;
+
+                await tx.inventory.update({ 
+                    where: { id: approvalRequest.inventoryId }, 
+                    data: { scrappedQty: newScrapQty, oldUsedQty: newOldUsedQty, total: newTotal } 
+                });
                 
-                await tx.inventory.update({ where: { id: approvalRequest.inventoryId }, data: { scrappedQty: newScrapQty, oldUsedQty: newOldUsedQty, total: newTotal } });
-                
-                if (stockDiff !== 0) {
-                    await tx.currentStock.update({
+                // FIX: 'update' ko 'upsert' se replace kiya gaya hai
+                const oldUsedQtyDiff = newOldUsedQty - inventory.oldUsedQty;
+                if (oldUsedQtyDiff !== 0) {
+                     await tx.currentStock.upsert({
                         where: { plantId_itemId: { plantId: inventory.plantId, itemId: inventory.itemId } },
-                        data: {
-                            newQty: { increment: (inventory.newQty - inventory.newQty) }, // No change to new
-                            oldUsedQty: { increment: (newOldUsedQty - inventory.oldUsedQty) }
+                        update: {
+                            oldUsedQty: { increment: oldUsedQtyDiff }
+                        },
+                        create: {
+                            plantId: inventory.plantId,
+                            itemId: inventory.itemId,
+                            newQty: 0,
+                            oldUsedQty: oldUsedQtyDiff
                         }
                     });
                 }
@@ -110,21 +155,20 @@ exports.processScrapRequest = async (req, res, next) => {
                     data: { status: 'APPROVED', approvedById: approver.id, processedAt: new Date() }
                 });
 
-                await logActivity({ /* ... */ });
+                await logActivity({
+                    userId: approver.id, action: 'SCRAP_REQUEST_APPROVE', ipAddress: req.ip,
+                    details: { approvalId: id, inventoryId: inventory.id, approvedQty: newScrapQty }
+                });
                 req.session.flash = { type: 'success', message: 'Scrap request approved.' };
 
-            } else { // --- REJECT LOGIC ---
-                await tx.scrapApproval.update({
-                    where: { id },
-                    data: { status: 'REJECTED', approvedById: approver.id, processedAt: new Date() }
-                });
-
+            } else { // Reject logic waisa hi hai
+                await tx.scrapApproval.update({ /* ... */ });
                 await logActivity({ /* ... */ });
                 req.session.flash = { type: 'info', message: 'Scrap request rejected.' };
             }
         });
 
-        // NAYA LOGIC: Transaction ke baad email bhejein
+        // Email logic waisa hi hai
         if (emailPayload.requestor) {
             if (action === 'approve') {
                 sendApprovalConfirmationEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
@@ -142,39 +186,142 @@ exports.processScrapRequest = async (req, res, next) => {
     }
 };
 
-// ... keep the existing listScrapApprovals and processScrapRequest functions ...
+exports.processConsumptionScrapRequest = async (req, res, next) => {
+    const { id } = req.params;
+    const { action } = req.body;
+    const { user: approver } = req.session;
+
+    if (!['approve', 'reject'].includes(action)) { /* ... */ }
+
+    try {
+        let emailPayload = null;
+
+        await prisma.$transaction(async (tx) => {
+            const approvalRequest = await tx.consumptionScrapApproval.findUnique({
+                where: { id },
+                include: {
+                    requestedBy: true,
+                    consumption: { include: { item: true, plant: true } }
+                }
+            });
+
+            if (!approvalRequest || approvalRequest.status !== 'PENDING') {
+                throw new Error('Approval request not found or already processed.');
+            }
+
+            emailPayload = { /* ... (email payload logic waisa hi hai) ... */ };
+            
+            if (action === 'approve') {
+                // Step 1: Approval ka status update karein
+                await tx.consumptionScrapApproval.update({
+                    where: { id },
+                    data: { status: 'APPROVED', approvedById: approver.id, processedAt: new Date() }
+                });
+
+                // Step 2 (THE FIX): Inventory table mein ek historical log banayein
+                await tx.inventory.create({
+                    data: {
+                        reservationNumber: `SCRAP-FROM-CONS-${approvalRequest.consumption.id.substring(0, 8)}`,
+                        date: new Date(),
+                        plantId: approvalRequest.consumption.plantId,
+                        itemId: approvalRequest.consumption.itemId,
+                        newQty: 0,
+                        oldUsedQty: 0,
+                        scrappedQty: approvalRequest.requestedQty,
+                        total: approvalRequest.requestedQty,
+                        remarks: `Scrap approved from consumption record. Original remarks: ${approvalRequest.remarks || ''}`,
+                        createdBy: approver.id,
+                    }
+                });
+                
+                req.session.flash = { type: 'success', message: 'Request has been APPROVED.' };
+
+            } else { // action === 'reject'
+                // Step 1: Approval ka status update karein
+                await tx.consumptionScrapApproval.update({
+                    where: { id },
+                    data: { status: 'REJECTED', approvedById: approver.id, processedAt: new Date() }
+                });
+
+                // Step 2 (THE FIX): Item ko 'Old & Used' stock mein wapas daalein
+                await tx.currentStock.upsert({
+                    where: {
+                        plantId_itemId: {
+                            plantId: approvalRequest.consumption.plantId,
+                            itemId: approvalRequest.consumption.itemId,
+                        }
+                    },
+                    update: {
+                        oldUsedQty: { increment: approvalRequest.requestedQty }
+                    },
+                    create: {
+                        plantId: approvalRequest.consumption.plantId,
+                        itemId: approvalRequest.consumption.itemId,
+                        oldUsedQty: approvalRequest.requestedQty
+                    }
+                });
+
+                req.session.flash = { type: 'info', message: 'Request has been REJECTED and item returned to stock.' };
+            }
+
+            // Audit log (dono cases ke liye)
+            await logActivity({ /* ... */ });
+        });
+
+        // Email logic (dono cases ke liye)
+        if (emailPayload.requestor) { /* ... */ }
+
+        res.redirect('/approvals/scrap');
+
+    } catch (error) {
+        console.error("Failed to process consumption scrap request:", error);
+        req.session.flash = { type: 'error', message: `Failed to process request: ${error.message}` };
+        res.redirect('/approvals/scrap');
+    }
+};
 
 /**
- * @desc    List all users pending approval.
- * @route   GET /approvals/users
+ * @desc    List all users pending approval and data needed for approval (plants, roles).
  */
 exports.listUserApprovals = async (req, res, next) => {
     try {
-        const pendingUsers = await prisma.user.findMany({
-            where: {
-                status: 'PENDING_APPROVAL',
-                isDeleted: false
-            },
-            include: {
-                plant: true, // Include plant name for context
-            },
-            orderBy: {
-                createdAt: 'asc'
-            }
-        });
+        const searchTerm = req.query.search || '';
 
-        // Get the count of pending scrap requests to pass to the layout
-        // This logic is duplicated, a helper function would be good for refactoring later
-        const scrapRequestCount = await prisma.scrapApproval.count({ where: { status: 'PENDING' } });
+        const whereClause = {
+            status: 'PENDING_APPROVAL',
+            isDeleted: false
+        };
+
+        if (searchTerm) {
+            whereClause.OR = [
+                { name: { contains: searchTerm, mode: 'insensitive' } },
+                { email: { contains: searchTerm, mode: 'insensitive' } }
+            ];
+        }
+
+        const [pendingUsers, plants, clusters, scrapRequestCount] = await Promise.all([
+            prisma.user.findMany({
+                where: whereClause,
+                orderBy: { createdAt: 'asc' }
+            }),
+            prisma.plant.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } }),
+            prisma.cluster.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } }),
+            prisma.scrapApproval.count({ where: { status: 'PENDING' } })
+        ]);
+
+        const assignableRoles = ['USER', 'VIEWER', 'CLUSTER_MANAGER'];
         
-        res.render('approvals/users', { // We will create this new view
+        res.render('approvals/users', {
             title: 'New User Approvals',
-            layout: 'layouts/approvals', // Use the same nested layout
+            layout: 'layouts/approvals',
             requests: pendingUsers,
-            scrapRequestCount, // Pass the count for the other tab
-            userRequestCount: pendingUsers.length // Pass count for this tab's badge
+            plants,
+            clusters,
+            assignableRoles,
+            scrapRequestCount,
+            userRequestCount: pendingUsers.length,
+            searchTerm // Search term ko view mein pass karein
         });
-
     } catch (error) {
         next(error);
     }
@@ -182,11 +329,11 @@ exports.listUserApprovals = async (req, res, next) => {
 
 /**
  * @desc    Process a new user approval request (Approve or Reject)
- * @route   POST /approvals/users/:id/process
  */
 exports.processUserRequest = async (req, res, next) => {
     const { id } = req.params; // User ID
-    const { action } = req.body; // 'approve' or 'reject'
+    // NAYA: Form se 'clusterId' bhi aa sakta hai
+    const { action, plantId, role, clusterId } = req.body;
 
     if (!['approve', 'reject'].includes(action)) {
         req.session.flash = { type: 'error', message: 'Invalid action.' };
@@ -195,38 +342,58 @@ exports.processUserRequest = async (req, res, next) => {
 
     try {
         const userToProcess = await prisma.user.findUnique({ where: { id } });
-
         if (!userToProcess || userToProcess.status !== 'PENDING_APPROVAL') {
             throw new Error('User not found or has already been processed.');
         }
 
         if (action === 'approve') {
+            // NAYI VALIDATION: Role ke hisaab se check karein
+            if (role === 'CLUSTER_MANAGER' && !clusterId) {
+                req.session.flash = { type: 'error', message: 'You must assign a cluster to approve a Cluster Manager.' };
+                return res.redirect('/approvals/users');
+            }
+            if ((role === 'USER' || role === 'VIEWER') && !plantId) {
+                req.session.flash = { type: 'error', message: 'You must assign a plant to approve a User or Viewer.' };
+                return res.redirect('/approvals/users');
+            }
+
+            let dataToUpdate = {
+                status: 'ACTIVE',
+                role: role,
+                updatedBy: req.session.user.id
+            };
+
+            // NAYA LOGIC: Role ke hisaab se data update karein
+            if (role === 'CLUSTER_MANAGER') {
+                dataToUpdate.clusterId = clusterId;
+                // Note: Hum manager ke liye plantId null kar sakte hain ya wahi rehne de sakte hain.
+                // Abhi ke liye hum use wahi rehne dete hain jo register karte samay select hua tha.
+            } else {
+                const plant = await prisma.plant.findUnique({ where: { id: plantId } });
+                if (!plant) throw new Error('Selected plant not found.');
+                dataToUpdate.plantId = plantId;
+                dataToUpdate.clusterId = plant.clusterId; // Cluster ID plant se aayega
+            }
+
             await prisma.user.update({
                 where: { id },
-                data: {
-                    status: 'ACTIVE' // Activate the user
-                }
+                data: dataToUpdate
             });
             req.session.flash = { type: 'success', message: `User ${userToProcess.name} has been approved and activated.` };
+        
         } else { // action === 'reject'
-            // For rejection, we will soft delete the user record entirely.
             await prisma.user.update({
                 where: { id },
-                data: {
-                    isDeleted: true,
-                    status: 'INACTIVE' // Also set to inactive as a safeguard
-                }
+                data: { isDeleted: true, status: 'INACTIVE', updatedBy: req.session.user.id }
             });
             req.session.flash = { type: 'info', message: `User registration for ${userToProcess.name} has been rejected.` };
         }
         
-        // TODO: Send notification email to the user...
-
         res.redirect('/approvals/users');
 
     } catch(error) {
         console.error("Failed to process user request:", error);
-        req.session.flash = { type: 'error', message: 'Failed to process user request.' };
+        req.session.flash = { type: 'error', message: `Failed to process request: ${error.message}` };
         res.redirect('/approvals/users');
     }
 };

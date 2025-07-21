@@ -1,17 +1,19 @@
+// src/routes/userRoutes.js
+
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
-const { isAuthenticated, hasRole } = require('../middleware/auth');
+const { hasRole } = require('../middleware/auth'); // isAuthenticated ab app.js mein hai
 const { ROLES } = require('../utils/constants');
 
-// --- THIS IS THE KEY SECURITY LINE ---
-// This middleware is applied to ALL routes defined in this file below it.
-// It checks for authentication first, then checks if the user's role is SUPER_ADMIN.
-router.use(isAuthenticated, hasRole([ROLES.SUPER_ADMIN]));
+// Poori file par Super Admin ka check lagega
+router.use(hasRole([ROLES.SUPER_ADMIN]));
 
-// All these routes are now protected by the middleware above.
+// NAYE ROUTES
 router.get('/', userController.listUsers);
-router.post('/', userController.createUser);
+router.get('/new', userController.renderAddForm); // Naya user banane ka form
+router.post('/new', userController.createUser);   // Form submit karne par
+router.get('/:id/edit', userController.renderEditForm); // User edit karne ka form
 router.post('/:id/edit', userController.updateUser);
 router.post('/:id/delete', userController.softDeleteUser);
 

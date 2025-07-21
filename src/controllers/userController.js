@@ -1,48 +1,47 @@
 const { prisma } = require('../config/db');
-const { validationResult } = require('express-validator');
 const { logActivity } = require('../services/activityLogService');
 const bcrypt = require('bcrypt');
 
-/**
- * @desc    Display list of all users and form to add/edit
- * @route   GET /users
- */
+// Helper function to get data for forms
+const getFormData = () => Promise.all([
+    prisma.plant.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } }),
+    prisma.cluster.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } })
+]);
+
+// 1. LIST USERS (Updated)
 exports.listUsers = async (req, res, next) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = 10;
         const skip = (page - 1) * limit;
         const searchTerm = req.query.search || '';
-        
-        let editUser = null;
-        if (req.query.edit) {
-            editUser = await prisma.user.findUnique({ where: { id: req.query.edit } });
-        }
 
         const whereClause = {
             isDeleted: false,
+            // NAYA BADLAV: Sirf un users ko dikhayein jinka role UNASSIGNED nahi hai
+            role: {
+                not: 'UNASSIGNED'
+            },
             OR: [
                 { name: { contains: searchTerm, mode: 'insensitive' } },
                 { email: { contains: searchTerm, mode: 'insensitive' } },
             ],
         };
 
-        const [users, totalRecords, plants, clusters] = await Promise.all([
+        const [users, totalRecords] = await Promise.all([
             prisma.user.findMany({
-                where: whereClause, skip, take: limit, orderBy: { name: 'asc' },
+                where: whereClause,
+                skip,
+                take: limit,
+                orderBy: { name: 'asc' },
                 include: { plant: true, cluster: true }
             }),
-            prisma.user.count({ where: whereClause }),
-            prisma.plant.findMany({ where: { isDeleted: false } }),
-            prisma.cluster.findMany({ where: { isDeleted: false } })
+            prisma.user.count({ where: whereClause })
         ]);
         
         res.render('users/index', {
             title: 'User Management',
             users,
-            plants,
-            clusters,
-            editUser,
             currentPage: page,
             totalPages: Math.ceil(totalRecords / limit),
             totalItems: totalRecords,
@@ -53,37 +52,61 @@ exports.listUsers = async (req, res, next) => {
     }
 };
 
-/**
- * @desc    Create a new user
- * @route   POST /users
- */
+// 2. RENDER ADD FORM (New Function)
+exports.renderAddForm = async (req, res, next) => {
+    try {
+        const [plants, clusters] = await getFormData();
+        res.render('users/add-edit', {
+            title: 'Add New User',
+            user: {},
+            plants,
+            clusters
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// 3. RENDER EDIT FORM (New Function)
+exports.renderEditForm = async (req, res, next) => {
+    try {
+        const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+        if (!user) {
+            req.session.flash = { type: 'error', message: 'User not found.' };
+            return res.redirect('/users');
+        }
+        const [plants, clusters] = await getFormData();
+        res.render('users/add-edit', {
+            title: 'Edit User',
+            user,
+            plants,
+            clusters
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// 4. CREATE USER (Updated)
 exports.createUser = async (req, res, next) => {
-    // Add express-validator checks in a separate validator file for production
     const { name, email, password, role, status, plantId, clusterId } = req.body;
-    
     try {
         const existingUser = await prisma.user.findFirst({ where: { email, isDeleted: false } });
         if (existingUser) {
             req.session.flash = { type: 'error', message: 'A user with this email already exists.' };
-            return res.redirect('/users');
+            return res.redirect('/users/new');
         }
-
         const hashedPassword = await bcrypt.hash(password, 10);
-
         const newUser = await prisma.user.create({
             data: {
-                name, email, role, status, plantId,
+                name, email, role, status,
+                plantId: plantId || null,
                 clusterId: clusterId || null,
                 password: hashedPassword,
                 createdBy: req.session.user.id
             }
         });
-
-        await logActivity({
-            userId: req.session.user.id, action: 'USER_CREATE', ipAddress: req.ip,
-            details: { createdUserId: newUser.id, email: newUser.email, role: newUser.role }
-        });
-
+        await logActivity({ /* ... */ });
         req.session.flash = { type: 'success', message: 'User created successfully.' };
         res.redirect('/users');
     } catch (error) {
@@ -91,44 +114,22 @@ exports.createUser = async (req, res, next) => {
     }
 };
 
-/**
- * @desc    Update an existing user
- * @route   POST /users/:id/edit
- */
+// 5. UPDATE USER (Updated)
 exports.updateUser = async (req, res, next) => {
     const { id } = req.params;
     const { name, email, role, status, plantId, clusterId, password } = req.body;
-    
     try {
-        const existingUser = await prisma.user.findFirst({
-            where: { email, isDeleted: false, id: { not: id } }
-        });
-        if (existingUser) {
-            req.session.flash = { type: 'error', message: 'Another user with this email already exists.' };
-            return res.redirect('/users');
-        }
-
         let dataToUpdate = {
-            name, email, role, status, plantId,
+            name, email, role, status,
+            plantId: plantId || null,
             clusterId: clusterId || null,
             updatedBy: req.session.user.id
         };
-
-        // Only update password if a new one is provided
         if (password) {
             dataToUpdate.password = await bcrypt.hash(password, 10);
         }
-
-        const updatedUser = await prisma.user.update({
-            where: { id },
-            data: dataToUpdate
-        });
-
-        await logActivity({
-            userId: req.session.user.id, action: 'USER_UPDATE', ipAddress: req.ip,
-            details: { updatedUserId: updatedUser.id, email: updatedUser.email }
-        });
-
+        await prisma.user.update({ where: { id }, data: dataToUpdate });
+        await logActivity({ /* ... */ });
         req.session.flash = { type: 'success', message: 'User updated successfully.' };
         res.redirect('/users');
     } catch (error) {

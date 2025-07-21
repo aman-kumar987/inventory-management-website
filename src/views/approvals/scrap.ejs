@@ -1,37 +1,57 @@
-<!-- This view will be rendered inside approvals/index.ejs -->
+<%# src/views/approvals/scrap.ejs %>
+
+<div class="mb-6 rounded-lg">
+    <form action="/approvals/scrap" method="GET" class="flex items-center gap-2">
+        <div class="bg-white relative flex-grow">
+             <input type="text" name="search" placeholder="Search by Item Code or Requester Name..."
+                   value="<%= searchTerm || '' %>" class="form-input w-full">
+        </div>
+        <button type="submit" class="btn-primary flex-shrink-0">Search</button>
+        <a href="/approvals/scrap" class="btn-secondary flex-shrink-0">Clear</a>
+    </form>
+</div>
+
 <div class="overflow-x-auto bg-white rounded-md shadow-sm">
     <table class="min-w-full divide-y divide-gray-200">
         <thead class="bg-gray-50">
             <tr>
                 <th class="table-header">Request Details</th>
                 <th class="table-header">Item & Location</th>
-                <th class="table-header">Quantity Change</th>
-                <th class="table-header">Reason / Remarks</th>
+                <th class="table-header text-center">Quantity Change</th>
+                <th class="table-header">Remarks</th>
                 <th class="table-header text-center">Actions</th>
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
             <% if (requests.length > 0) { %>
-                <% requests.forEach(req => { %>
+                <% requests.forEach(request => { %>
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 text-sm">
-                            <div class="font-medium text-gray-900"><%= req.requestedBy.name %></div>
-                            <div class="text-gray-500"><%= new Date(req.createdAt).toLocaleString() %></div>
+                            <div class="font-medium text-gray-900"><%= request.requestedBy.name %></div>
+                            <div class="text-gray-500"><%= new Date(request.createdAt).toLocaleString('en-IN') %></div>
+                            <div class="text-xs font-semibold text-gray-400 mt-1">
+                                Type: <span class="text-indigo-600"><%= request.type %></span>
+                            </div>
                         </td>
                         <td class="px-6 py-4 text-sm">
-                            <div class="font-medium text-gray-900"><%= req.inventory.item.item_code %></div>
-                            <div class="text-gray-500" title="<%= req.inventory.item.item_description %>"><%= req.inventory.item.item_description?.substring(0, 30) %>...</div>
-                            <div class="text-xs text-gray-400 mt-1">Plant: <%= req.inventory.plant.name %></div>
+                            <% const item = request.type === 'Inventory' ? request.inventory.item : request.consumption.item; %>
+                            <% const plant = request.type === 'Inventory' ? request.inventory.plant : request.consumption.plant; %>
+                            <div class="font-medium text-gray-900"><%= item.item_code %></div>
+                            <div class="text-gray-500" title="<%= item.item_description %>"><%= item.item_description?.substring(0, 30) %>...</div>
+                            <div class="text-xs text-gray-400 mt-1">Plant: <%= plant.name %></div>
                         </td>
-                        <td class="px-6 py-4 text-sm">
-                            Current: <span class="font-semibold"><%= req.inventory.scrappedQty %></span> → 
-                            Requested: <span class="font-semibold text-red-600 text-base"><%= req.requestedQty %></span>
+                        
+                        <%# NAYA: Quantity Change ka format update kiya gaya %>
+                        <td class="px-6 py-4 text-sm text-center">
+                            Current: <span class="font-semibold"><%= request.currentScrapQty %></span> → 
+                            Requested: <span class="font-semibold text-red-600 text-base"><%= request.requestedQty %></span>
                         </td>
-                        <td class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title="<%= req.remarks %>">
-                            <%= req.remarks %>
+                        
+                        <td class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title="<%= request.remarks %>">
+                            <%= request.remarks || '-' %>
                         </td>
                         <td class="px-6 py-4 text-center">
-                            <form action="/approvals/scrap/<%= req.id %>/process" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to ' + (event.submitter.value) + ' this request?');">
+                            <form action="/approvals/<%= request.type === 'Inventory' ? 'scrap' : 'consumption-scrap' %>/<%= request.id %>/process" method="POST" class="inline" onsubmit="return confirm('Are you sure?');">
                                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                                 <button type="submit" name="action" value="approve" class="btn-primary !py-1 !px-3 !text-xs !bg-green-600 !hover:bg-green-700">Approve</button>
                                 <button type="submit" name="action" value="reject" class="btn-secondary !py-1 !px-3 !text-xs !bg-red-600 !hover:bg-red-700 !text-white">Reject</button>
@@ -39,9 +59,7 @@
                         </td>
                     </tr>
                 <% }) %>
-            <% } else { %>
-                <tr><td colspan="5" class="text-center p-6 text-gray-500">No pending scrap approval requests.</td></tr>
-            <% } %>
+            <% } else { /* ... No requests found message ... */ } %>
         </tbody>
     </table>
 </div>

@@ -1,100 +1,66 @@
 <form action="/inventory" method="POST" id="inventory-form" class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-    <!-- Header -->
     <div class="flex justify-between items-start mb-8 border-b pb-4">
         <div>
-            <h1 class="text-3xl font-bold text-gray-900">
-                <%= title %>
-            </h1>
+            <h1 class="text-3xl font-bold text-gray-900"><%= title %></h1>
             <p class="text-sm text-gray-500 mt-1">Add multiple items under a single reservation number.</p>
         </div>
-        <div class="flex gap-3"><a href="/inventory" class="btn-secondary">Cancel</a><button type="submit"
-                class="btn-primary">Submit All Entries</button></div>
+        <div class="flex gap-3"><a href="/inventory" class="btn-secondary">Cancel</a><button type="submit" class="btn-primary">Submit All Entries</button></div>
     </div>
-    <!-- Shared Fields -->
     <div class="bg-white p-8 rounded-xl shadow-lg mb-8">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-            <div><label class="form-label">Reservation Number</label><input type="text" name="reservationNumber"
-                    required class="form-input"></div>
-            <div><label class="form-label">Date of Receipt</label><input type="date" name="date" required
-                    class="form-input"></div>
+            <div><label class="form-label">Reservation Number</label><input type="text" name="reservationNumber" required class="form-input"></div>
+            <div><label class="form-label">Date of Receipt</label><input type="date" name="date" required class="form-input"></div>
         </div>
     </div>
-    <!-- Line Items Container -->
     <div id="line-items-container" class="space-y-8"></div>
-    <!-- Add Button -->
-    <div class="mt-8 flex justify-center"><button type="button" id="add-line-item-btn" class="btn-add-item"><i
-                class="fas fa-plus mr-2"></i>Add Item Entry</button></div>
+    <div class="mt-8 flex justify-center"><button type="button" id="add-line-item-btn" class="btn-add-item"><i class="fas fa-plus mr-2"></i>Add Item Entry</button></div>
 </form>
 
-<!-- HIDDEN TEMPLATE -->
 <template id="line-item-template">
     <div class="line-item-block bg-white p-8 rounded-xl shadow-lg relative border">
         <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-semibold">Line Item <span class="item-number">1</span></h2><button type="button"
-                title="Remove" class="remove-item-btn absolute top-4 right-4 btn-icon-subtle hidden"><i
-                    class="fas fa-trash-alt fa-lg"></i></button>
+            <h2 class="text-xl font-semibold">Line Item <span class="item-number">1</span></h2>
+            <button type="button" title="Remove" class="remove-item-btn absolute top-4 right-4 btn-icon-subtle hidden"><i class="fas fa-trash-alt fa-lg"></i></button>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
             <div>
                 <label class="form-label">Plant</label>
-                <% if (user.role==='USER' ) { %><input type="text" value="<%= plants[0]?.name || '' %>" disabled
-                        class="form-input form-input-disabled"><input type="hidden" data-name="plantId"
-                        value="<%= user.plantId %>">
-                    <% } else { %>
-                        <div class="relative plant-search-wrapper">
-                            <input type="text" class="form-input plant-search-input" placeholder="Search plant..."
-                                autocomplete="off">
-                            <input type="hidden" data-name="plantId" class="selected-plant-id">
-                            <ul
-                                class="plant-search-results absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
-                            </ul>
-                        </div>
-
-                        <% } %>
+                <% if (user.role==='USER' ) { %>
+                    <input type="text" value="<%= plants[0]?.name || '' %>" disabled class="form-input form-input-disabled">
+                    <%# THE FIX: Added hardcoded name attribute like in the consumption form %>
+                    <input type="hidden" name="lineItems[0][plantId]" data-name="plantId" value="<%= user.plantId %>" required>
+                <% } else { %>
+                    <div class="relative plant-search-wrapper">
+                        <input type="text" class="form-input plant-search-input" placeholder="Search plant..." autocomplete="off">
+                        <input type="hidden" data-name="plantId" class="selected-plant-id" required>
+                        <ul class="plant-search-results absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden"></ul>
+                    </div>
+                <% } %>
             </div>
             <div>
                 <label class="form-label">Select Item</label>
                 <div class="relative item-search-wrapper">
-                    <input type="text" class="form-input item-search-input" placeholder="Search item..."
-                        autocomplete="off">
-                    <input type="hidden" data-name="itemId" class="selected-item-id">
-                    <ul
-                        class="item-search-results absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
-                    </ul>
+                    <input type="text" class="form-input item-search-input" placeholder="Search item..." autocomplete="off">
+                    <input type="hidden" data-name="itemId" class="selected-item-id" required>
+                    <ul class="item-search-results absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden"></ul>
                 </div>
-
-
-
             </div>
         </div>
-        <div class="mt-6"><label class="form-label">Remarks</label><textarea data-name="remarks" rows="2"
-                class="form-input"></textarea></div>
+        <div class="mt-6"><label class="form-label">Remarks</label><textarea data-name="remarks" rows="2" class="form-input"></textarea></div>
         <div class="mt-8 pt-6 border-t">
             <h3 class="text-lg font-semibold">Quantities</h3>
             <div class="quantity-container space-y-5 mt-4">
                 <div class="quantity-block grid grid-cols-12 gap-4 items-end">
-                    <div class="col-span-12 md:col-span-5"><label class="form-label">Category</label><select
-                            data-cat-name="type" class="form-input category-select">
-                            <option value="New">New</option>
-                            <option value="OldUsed">Old/Used</option>
-                            <option value="Scrapped">Scrapped</option>
-                        </select></div>
-                    <div class="col-span-12 md:col-span-5"><label class="form-label">Quantity</label><input
-                            type="number" data-cat-name="quantity" min="0" value="0" required class="form-input"></div>
-                    <div class="col-span-12 md:col-span-2 flex items-center gap-2"><button type="button" title="Add"
-                            class="btn-icon-add"><i class="fas fa-plus"></i></button><button type="button"
-                            title="Remove" class="btn-icon-remove hidden"><i class="fas fa-minus"></i></button></div>
+                    <div class="col-span-12 md:col-span-5"><label class="form-label">Category</label><select data-cat-name="type" class="form-input category-select"><option value="New">New</option><option value="OldUsed">Old/Used</option><option value="Scrapped">Scrapped</option></select></div>
+                    <div class="col-span-12 md:col-span-5"><label class="form-label">Quantity</label><input type="number" data-cat-name="quantity" min="0" value="0" required class="form-input"></div>
+                    <div class="col-span-12 md:col-span-2 flex items-center gap-2"><button type="button" title="Add" class="btn-icon-add"><i class="fas fa-plus"></i></button><button type="button" title="Remove" class="btn-icon-remove hidden"><i class="fas fa-minus"></i></button></div>
                 </div>
             </div>
         </div>
     </div>
 </template>
-<script id="item-list-json" type="application/json">
-    <%- JSON.stringify(items) %>
-</script>
-<script id="plant-list-json" type="application/json">
-  <%- JSON.stringify(plants) %>
-</script>
 
+<script id="item-list-json" type="application/json"><%- JSON.stringify(items) %></script>
+<script id="plant-list-json" type="application/json"><%- JSON.stringify(plants) %></script>
 <script src="/js/inventory-form.js"></script>

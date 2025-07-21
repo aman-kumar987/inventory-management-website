@@ -5,8 +5,6 @@ const { validateItem } = require('../validators/itemValidator');
 const { isAuthenticated, hasRole } = require('../middleware/auth');
 const { ROLES } = require('../utils/constants'); // We'll create this file
 
-// Protect all item routes
-router.use(isAuthenticated);
 
 // List items (all roles can view)
 router.get('/', itemController.listItems);

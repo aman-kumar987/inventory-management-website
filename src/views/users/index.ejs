@@ -1,62 +1,65 @@
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-    <!-- Left side: Add/Edit Form -->
-    <div class="lg:col-span-1">
-        <h2 class="text-xl font-bold text-gray-800 mb-4">
-            <%= editUser ? 'Edit User' : 'Add New User' %>
-        </h2>
-        <div class="bg-white p-6 rounded-lg shadow-md">
-            <form action="<%= editUser ? `/users/${editUser.id}/edit` : '/users' %>" method="POST">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <div class="space-y-4">
-                    <div><label class="form-label">Full Name</label><input type="text" name="name" required class="form-input" value="<%= editUser ? editUser.name : '' %>"></div>
-                    <div><label class="form-label">Email</label><input type="email" name="email" required class="form-input" value="<%= editUser ? editUser.email : '' %>"></div>
-                    <div><label class="form-label">Password</label><input type="password" name="password" <%= !editUser ? 'required' : '' %> class="form-input" placeholder="<%= editUser ? 'Leave blank to keep same' : '' %>"></div>
-                    <div><label class="form-label">Role</label><select name="role" required class="form-input"><% for(const role of ['SUPER_ADMIN', 'CLUSTER_MANAGER', 'USER', 'VIEWER']) { %><option value="<%= role %>" <%= (editUser && editUser.role === role) ? 'selected' : '' %>><%= role.replace('_', ' ') %></option><% } %></select></div>
-                    <div><label class="form-label">Status</label><select name="status" required class="form-input"><% for(const status of ['ACTIVE', 'INACTIVE']) { %><option value="<%= status %>" <%= (editUser && editUser.status === status) ? 'selected' : '' %>><%= status %></option><% } %></select></div>
-                    <div><label class="form-label">Plant</label><select name="plantId" required class="form-input"><% plants.forEach(plant => { %><option value="<%= plant.id %>" <%= (editUser && editUser.plantId === plant.id) ? 'selected' : '' %>><%= plant.name %></option><% }) %></select></div>
-                    <div><label class="form-label">Cluster (for Managers)</label><select name="clusterId" class="form-input"><option value="">None</option><% clusters.forEach(cluster => { %><option value="<%= cluster.id %>" <%= (editUser && editUser.clusterId === cluster.id) ? 'selected' : '' %>><%= cluster.name %></option><% }) %></select></div>
-                </div>
-                <div class="mt-6 flex gap-x-3">
-                    <button type="submit" class="btn-primary flex-grow"><%= editUser ? 'Update User' : 'Create User' %></button>
-                    <% if (editUser) { %><a href="/users" class="btn-secondary">Cancel</a><% } %>
-                </div>
-            </form>
-        </div>
-    </div>
+<%# src/views/users/index.ejs %>
 
-    <!-- Right side: List of Existing Users -->
-    <div class="lg:col-span-2">
-        <h2 class="text-xl font-bold text-gray-800 mb-4">Existing Users</h2>
-        <div class="overflow-x-auto bg-white rounded-md shadow-sm">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="table-header">Name</th><th class="table-header">Role</th><th class="table-header">Plant / Cluster</th><th class="table-header">Status</th><th class="table-header text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    <% if (users.length > 0) { %>
-                        <% users.forEach(user => { %>
-                            <tr class="hover:bg-gray-50">
-                                <td class="px-6 py-4"><div class="font-medium text-gray-900"><%= user.name %></div><div class="text-sm text-gray-500"><%= user.email %></div></td>
-                                <td class="px-6 py-4 text-sm text-gray-500"><%= user.role.replace('_', ' ') %></td>
-                                <td class="px-6 py-4 text-sm text-gray-500"><%= user.plant.name %><% if(user.cluster) { %><br><span class="text-xs text-gray-400">(Cluster: <%= user.cluster.name %>)</span><% } %></td>
-                                <td class="px-6 py-4 text-sm"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full <%= user.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' %>"><%= user.status %></span></td>
-                                <td class="px-6 py-4 text-center text-sm font-medium space-x-4">
-                                    <a href="/users?edit=<%= user.id %>" class="text-indigo-600 hover:text-indigo-900" title="Edit"><i class="fas fa-pencil-alt"></i></a>
-                                    <form action="/users/<%= user.id %>/delete" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to delete this user?');">
-                                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                                        <button type="submit" class="text-red-600 hover:text-red-900" title="Delete"><i class="fas fa-trash-alt"></i></button>
-                                    </form>
-                                </td>
-                            </tr>
-                        <% }) %>
-                    <% } else { %>
-                        <tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">No users found.</td></tr>
-                    <% } %>
-                </tbody>
-            </table>
-        </div>
-        <!-- Pagination would go here -->
+<div class="flex justify-between items-center mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800"><%= title %></h1>
+        <p class="text-sm text-gray-500">Add, edit, and manage system users.</p>
     </div>
+    <a href="/users/new" class="btn-primary">Add New User</a>
+</div>
+
+<div class="mb-4 bg-white p-4 rounded-lg shadow-sm border">
+    <form action="/users" method="GET" class="flex items-center gap-2">
+        <div class="relative flex-grow">
+             <input type="text" name="search" placeholder="Search by Name or Email..."
+                   value="<%= searchTerm || '' %>" class="form-input w-full">
+        </div>
+        <button type="submit" class="btn-primary flex-shrink-0">Search</button>
+        <a href="/users" class="btn-secondary flex-shrink-0">Clear</a>
+    </form>
+</div>
+
+<div class="overflow-x-auto bg-white rounded-md shadow-sm">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="table-header">Name</th>
+                <th class="table-header">Role</th>
+                <th class="table-header">Plant / Cluster</th>
+                <th class="table-header">Status</th>
+                <th class="table-header text-center">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            <% if (users.length > 0) { %>
+                <% users.forEach(user => { %>
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4">
+                            <div class="font-medium text-gray-900"><%= user.name %></div>
+                            <div class="text-sm text-gray-500"><%= user.email %></div>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-500"><%= user.role.replace('_', ' ') %></td>
+                        <td class="px-6 py-4 text-sm text-gray-500">
+                            <% if (user.plant) { %><%= user.plant.name %><% } else { %><span class="text-gray-400 italic">Not Assigned</span><% } %>
+                            <% if(user.cluster) { %><br><span class="text-xs text-gray-400">(Cluster: <%= user.cluster.name %>)</span><% } %>
+                        </td>
+                        <td class="px-6 py-4 text-sm">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full <%= user.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : (user.status === 'PENDING_APPROVAL' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800') %>">
+                                <%= user.status.replace('_', ' ') %>
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-center text-sm font-medium space-x-4">
+                            <a href="/users/<%= user.id %>/edit" class="text-indigo-600 hover:text-indigo-900" title="Edit"><i class="fas fa-pencil-alt"></i></a>
+                            <form action="/users/<%= user.id %>/delete" method="POST" class="inline" onsubmit="return confirm('Are you sure?');">
+                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                <button type="submit" class="text-red-600 hover:text-red-900" title="Delete"><i class="fas fa-trash-alt"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                <% }) %>
+            <% } else { %>
+                <tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">No users found.</td></tr>
+            <% } %>
+        </tbody>
+    </table>
 </div>

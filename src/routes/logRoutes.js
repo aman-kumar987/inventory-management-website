@@ -5,7 +5,7 @@ const { isAuthenticated, hasRole } = require('../middleware/auth');
 const { ROLES } = require('../utils/constants');
 
 // Protect all log routes for Super Admins only
-router.use(isAuthenticated, hasRole([ROLES.SUPER_ADMIN]));
+router.use(hasRole([ROLES.SUPER_ADMIN]));
 
 router.get('/', logController.listLogs);
 

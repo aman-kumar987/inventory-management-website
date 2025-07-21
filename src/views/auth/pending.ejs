@@ -1,0 +1,14 @@
+<div class="min-h-screen bg-gray-100 flex flex-col items-center justify-center">
+    <div class="max-w-md w-full bg-white p-8 rounded-lg shadow-lg text-center">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">Approval Pending</h1>
+        </div>
+        <p class="text-gray-600 mb-6">
+            Hello, <strong class="font-semibold"><%= user.name %></strong>! Your account has been successfully registered and is currently waiting for administrator approval.
+        </p>
+        <p class="text-gray-600 mb-8">
+            Please contact an administrator to activate your account. You will be notified once your account is approved.
+        </p>
+        <a href="/logout" class="btn-secondary w-full">Logout</a>
+    </div>
+</div>

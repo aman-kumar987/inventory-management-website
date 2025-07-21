@@ -37,6 +37,17 @@ exports.hasRole = (roles) => {
     };
 };
 
-
-// Add this line
 exports.isSuperAdmin = exports.hasRole([ROLES.SUPER_ADMIN]);
+
+exports.isApproved = (req, res, next) => {
+    // Ye middleware isAuthenticated ke baad chalega, isliye user hamesha maujood hoga
+    if (req.session.user && req.session.user.status === 'PENDING_APPROVAL') {
+        // Agar user pending hai, to use pending page par bhejein
+        return res.render('auth/pending', {
+            title: 'Approval Pending',
+            user: req.session.user
+        });
+    }
+    // Agar user approved hai, to use aage badhne dein
+    next();
+};

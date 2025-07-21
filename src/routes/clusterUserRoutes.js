@@ -5,7 +5,7 @@ const { isAuthenticated, hasRole } = require('../middleware/auth');
 const { ROLES } = require('../utils/constants');
 
 // Protect these routes for Cluster Managers only
-router.use(isAuthenticated, hasRole([ROLES.CLUSTER_MANAGER]));
+router.use(hasRole([ROLES.CLUSTER_MANAGER]));
 
 router.get('/', clusterUserController.listUsers);
 router.post('/', clusterUserController.createUser);

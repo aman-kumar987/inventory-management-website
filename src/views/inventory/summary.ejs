@@ -35,6 +35,8 @@
     </form>
 </div>
 
+<%# src/views/inventory/summary.ejs %>
+
 <div class="overflow-x-auto bg-white rounded-md shadow-sm">
     <table class="min-w-full divide-y divide-gray-200">
         <thead class="bg-gray-50">
@@ -43,7 +45,8 @@
                 <th class="table-header w-2/5">Item</th>
                 <th class="table-header text-center w-24">Total New</th>
                 <th class="table-header text-center w-24">Total Old</th>
-                <%# "Total Scrap" column yahan se hata diya gaya hai %>
+                <%# NAYA: "Total Scrap" column wapas add kiya gaya hai %>
+                <th class="table-header text-center w-24">Total Scrap</th>
                 <th class="table-header text-center w-24">Consumed (Net)</th>
                 <th class="table-header text-center w-28 font-bold">Net Available</th>
             </tr>
@@ -52,37 +55,28 @@
             <% if (data.length > 0) { %>
                 <% data.forEach(record => { %>
                     <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 text-sm font-medium text-gray-800">
-                            <%= record.plant %>
-                        </td>
+                        <td class="px-6 py-4 text-sm font-medium text-gray-800"><%= record.plant %></td>
                         <td class="px-6 py-4 text-sm">
-                            <div class="font-medium text-gray-900">
-                                <%= record.itemCode %>
-                            </div>
-                            <div class="text-gray-500 max-w-xs truncate" title="<%= record.itemDescription %>">
-                                <%= record.itemDescription || '-' %>
-                            </div>
+                            <div class="font-medium text-gray-900"><%= record.itemCode %></div>
+                            <div class="text-gray-500 max-w-xs truncate" title="<%= record.itemDescription %>"><%= record.itemDescription || '-' %></div>
                             <div class="text-xs text-gray-400">Group: <%= record.itemGroup %></div>
                         </td>
-                        <td class="px-6 py-4 text-center text-sm text-green-600 font-semibold">
-                            <%= record.newQty %>
+                        <td class="px-6 py-4 text-center text-sm text-green-600 font-semibold"><%= record.newQty %></td>
+                        <td class="px-6 py-4 text-center text-sm text-blue-600 font-semibold"><%= record.oldUsedQty %></td>
+                        
+                        <%# NAYA: "Total Scrap" data cell wapas add kiya gaya hai %>
+                        <td class="px-6 py-4 text-center text-sm text-orange-500 font-semibold">
+                            <%= record.scrappedQty %>
                         </td>
-                        <td class="px-6 py-4 text-center text-sm text-blue-600 font-semibold">
-                            <%= record.oldUsedQty %>
-                        </td>
-                        <%# "Total Scrap" data cell yahan se hata diya gaya hai %>
-                        <td class="px-6 py-4 text-center text-sm text-red-600 font-semibold">
-                            <%= record.consumed %>
-                        </td>
-                        <td class="px-6 py-4 text-center text-base font-bold text-gray-900">
-                            <%= record.netAvailable %>
-                        </td>
+
+                        <td class="px-6 py-4 text-center text-sm text-red-600 font-semibold"><%= record.consumed %></td>
+                        <td class="px-6 py-4 text-center text-base font-bold text-gray-900"><%= record.netAvailable %></td>
                     </tr>
                 <% }) %>
             <% } else { %>
                 <tr>
-                    <%# Colspan 7 se 6 kar diya gaya hai %>
-                    <td colspan="6" class="px-6 py-4 text-center text-gray-500">No stock found for the selected criteria.</td>
+                    <%# NAYA: Colspan 6 se 7 kar diya gaya hai %>
+                    <td colspan="7" class="px-6 py-4 text-center text-gray-500">No stock found for the selected criteria.</td>
                 </tr>
             <% } %>
         </tbody>

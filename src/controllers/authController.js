@@ -121,7 +121,7 @@ exports.renderRegisterPage = async (req, res, next) => {
  */
 exports.register = async (req, res, next) => {
     try {
-        const { name, email, password, role, plantId } = req.body;
+        const { name, email, password } = req.body;
 
         const existingUser = await prisma.user.findFirst({
             where: { email: email.toLowerCase(), isDeleted: false }
@@ -134,42 +134,24 @@ exports.register = async (req, res, next) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        // --- Business Logic for Approval ---
-        let userStatus = 'ACTIVE';
-        let successMessage = 'Registration successful! You can now log in.';
-        let userClusterId = null;
-
-        // Find the cluster of the selected plant to assign it if the role is not a manager
-        const plant = await prisma.plant.findUnique({ where: { id: plantId } });
-        if (plant) {
-            userClusterId = plant.clusterId;
-        }
-
-        if (role === 'CLUSTER_MANAGER') {
-            userStatus = 'PENDING_APPROVAL';
-            userClusterId = null; // Cluster ID must be assigned by Super Admin
-            successMessage = 'Registration successful! Your account is pending approval from a Super Admin.';
-        }
-
         const newUser = await prisma.user.create({
             data: {
                 name,
                 email: email.toLowerCase(),
                 password: hashedPassword,
-                role,
-                status: userStatus,
-                plantId,
-                clusterId: userClusterId
+                role: 'UNASSIGNED', // Hamesha 'UNASSIGNED' se banega
+                status: 'PENDING_APPROVAL', // Hamesha 'PENDING_APPROVAL' se banega
+                plantId: null // Shuru mein koi plant nahi hoga
             }
         });
 
         await logActivity({
             action: 'USER_REGISTER',
             ipAddress: req.ip,
-            details: { userId: newUser.id, email: newUser.email, role: newUser.role, status: newUser.status }
+            details: { userId: newUser.id, email: newUser.email }
         });
 
-        req.session.flash = { type: 'success', message: successMessage };
+        req.session.flash = { type: 'success', message: 'Registration successful! Your account is pending approval from an administrator.' };
         res.redirect('/login');
 
     } catch (error) {

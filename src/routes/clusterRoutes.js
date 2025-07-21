@@ -5,7 +5,6 @@ const { isAuthenticated, hasRole } = require('../middleware/auth');
 const { ROLES } = require('../utils/constants');
 const { validateCluster } = require('../validators/clusterValidator'); // <-- IMPORT VALIDATOR
 
-router.use(isAuthenticated);
 const canManage = hasRole([ROLES.SUPER_ADMIN]);
 
 router.get('/', clusterController.listClusters);

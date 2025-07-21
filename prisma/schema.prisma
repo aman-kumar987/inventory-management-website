@@ -26,6 +26,7 @@ enum Role {
   CLUSTER_MANAGER
   USER
   VIEWER
+  UNASSIGNED
 }
 
 enum UserStatus {
@@ -51,14 +52,14 @@ model User {
   role                         Role
   status                       UserStatus                 @default(ACTIVE)
   isDeleted                    Boolean                    @default(false)
-  plantId                      String
+  plantId                      String?
   clusterId                    String?
   lastLoginAt                  DateTime?
   createdAt                    DateTime                   @default(now())
   updatedAt                    DateTime                   @updatedAt
   createdBy                    String?
   updatedBy                    String?
-  plant                        Plant                      @relation(fields: [plantId], references: [id])
+  plant                        Plant?                      @relation(fields: [plantId], references: [id])
   cluster                      Cluster?                   @relation(fields: [clusterId], references: [id])
   changeHistory                ChangeHistory[]
   activityLogs                 ActivityLog[]

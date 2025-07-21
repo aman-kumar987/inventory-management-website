@@ -84,34 +84,75 @@ exports.createConsumption = async (req, res, next) => {
     const { date, lineItems } = req.body;
     const { user } = req.session;
 
-    if (!date || !lineItems || !Array.isArray(lineItems) || lineItems.length === 0) { /* ... */ }
+    if (!lineItems || !Array.isArray(lineItems) || lineItems.length === 0) {
+        req.session.flash = { type: 'error', message: 'At least one consumption entry is required.' };
+        return res.redirect('/consumption/new');
+    }
 
     const consumptionDate = new Date(date);
+    if (!date || isNaN(consumptionDate.getTime())) {
+        req.session.flash = { type: 'error', message: 'A valid date is required.' };
+        return res.redirect('/consumption/new');
+    }
 
     try {
-        const logDetails = [];
-
         await prisma.$transaction(async (tx) => {
-            for (const [index, item] of lineItems.entries()) {
-                // ... (form fields logic waisa hi hai)
-                const { /* ... */ receivedAsCategory } = item;
-                const quantity = parseInt(item.quantity);
+            for (const item of lineItems) {
+                const {
+                    plantId, location, subLocation, quantity: qtyString, remarks, isReturnable,
+                    new_itemCode, new_assetNo, new_serialNo, new_poNo, consumeFromCategory,
+                    oldReceived, old_itemCode, old_assetNo, old_serialNo, old_poNo, old_faultRemark, receivedAsCategory
+                } = item;
+                const quantity = parseInt(qtyString);
+                const stockPlantId = user.role === 'USER' ? user.plantId : plantId;
 
-                // ... (stock validation aur update logic waisa hi hai)
+                // Stock validation and update logic
+                const stockToConsume = await tx.currentStock.findUnique({ where: { plantId_itemId: { plantId: stockPlantId, itemId: new_itemCode } } });
+                if (!stockToConsume) throw new Error(`Stock for new item not found.`);
+                if (consumeFromCategory === 'New' && stockToConsume.newQty < quantity) throw new Error(`Insufficient 'New' stock.`);
+                if (consumeFromCategory === 'OldUsed' && stockToConsume.oldUsedQty < quantity) throw new Error(`Insufficient 'Old & Used' stock.`);
+                const stockUpdateData = consumeFromCategory === 'New' ? { newQty: { decrement: quantity } } : { oldUsedQty: { decrement: quantity } };
+                await tx.currentStock.update({ where: { plantId_itemId: { plantId: stockPlantId, itemId: new_itemCode } }, data: stockUpdateData });
 
                 let approvalRequired = false;
-                if (item.oldReceived === 'on' && item.old_itemCode) {
+                if (oldReceived === 'on' && old_itemCode) {
                     if (receivedAsCategory === 'OldUsed') {
-                        await tx.currentStock.upsert({ /* ... */ });
+                        await tx.currentStock.upsert({
+                            where: { plantId_itemId: { plantId: stockPlantId, itemId: old_itemCode } },
+                            update: { oldUsedQty: { increment: quantity } },
+                            create: { plantId: stockPlantId, itemId: old_itemCode, oldUsedQty: quantity }
+                        });
                     } else if (receivedAsCategory === 'Scrapped') {
                         approvalRequired = true;
                     }
                 }
 
                 const consumptionRecord = await tx.consumption.create({
-                    data: { /* ... (saara data waisa hi hai) */ }
+                    data: {
+                        date: consumptionDate,
+                        plantId: stockPlantId,
+                        consumption_location: sanitize(location),
+                        sub_location: sanitize(subLocation),
+                        quantity: quantity,
+                        isReturnable: isReturnable === 'on',
+                        remarks: sanitize(remarks),
+                        itemId: new_itemCode,
+                        newInstallation: true,
+                        new_itemCode,
+                        new_assetNo: sanitize(new_assetNo),
+                        new_serialNo: sanitize(new_serialNo),
+                        new_poNo: sanitize(new_poNo),
+                        oldAndReceived: oldReceived === 'on',
+                        old_itemCode: oldReceived === 'on' ? old_itemCode : null,
+                        old_assetNo: oldReceived === 'on' ? sanitize(old_assetNo) : null,
+                        old_serialNo: oldReceived === 'on' ? sanitize(old_serialNo) : null,
+                        old_poNo: oldReceived === 'on' ? sanitize(old_poNo) : null,
+                        old_faultRemark: oldReceived === 'on' ? sanitize(old_faultRemark) : null,
+                        createdBy: user.id,
+                    }
                 });
 
+                // THE FIX: This block is now complete and correct
                 if (approvalRequired) {
                     const approval = await tx.consumptionScrapApproval.create({
                         data: {
@@ -127,14 +168,13 @@ exports.createConsumption = async (req, res, next) => {
                         userId: user.id,
                         action: 'SCRAP_REQUEST_CREATE',
                         ipAddress: req.ip,
-                        details: {
-                            approvalId: approval.id,
-                            consumptionId: consumptionRecord.id,
-                            requestedQty: quantity
+                        details: { 
+                            approvalId: approval.id, 
+                            consumptionId: consumptionRecord.id, 
+                            requestedQty: quantity 
                         }
                     });
 
-                    // NAYA LOGIC: Approver ko dhoondh kar email bhejein
                     if (user.clusterId) {
                         const approver = await tx.user.findFirst({
                             where: { clusterId: user.clusterId, role: 'CLUSTER_MANAGER', isDeleted: false }
@@ -142,8 +182,6 @@ exports.createConsumption = async (req, res, next) => {
                         if (approver) {
                             const itemDetails = await tx.item.findUnique({ where: { id: consumptionRecord.itemId } });
                             const plantDetails = await tx.plant.findUnique({ where: { id: consumptionRecord.plantId } });
-
-                            // Email function ke liye ek temporary object banayein
                             const emailPayload = {
                                 item: itemDetails,
                                 plant: plantDetails,
@@ -153,14 +191,12 @@ exports.createConsumption = async (req, res, next) => {
                         }
                     }
                 }
-                logDetails.push({ /* ... */ });
             }
         });
 
-        // ... (baaki ka function waisa hi hai)
-        await logActivity({ /* ... */ });
         req.session.flash = { type: 'success', message: 'Consumption recorded successfully.' };
         res.redirect('/consumption');
+
     } catch (error) {
         console.error("Consumption creation failed:", error.message);
         req.session.flash = { type: 'error', message: `Failed to record consumption: ${error.message}` };

@@ -5,8 +5,6 @@ const { validateItemGroup } = require('../validators/itemGroupValidator');
 const { isAuthenticated, hasRole } = require('../middleware/auth');
 const { ROLES } = require('../utils/constants');
 
-// Protect all routes
-router.use(isAuthenticated);
 
 // Only allow Admins and Managers to manage item groups
 const canManage = hasRole([ROLES.SUPER_ADMIN]);

@@ -8,7 +8,6 @@ const csrf = require('csurf');
 
 const csrfProtection = csrf(); // local use
 
-router.use(isAuthenticated);
 
 const canImport = hasRole([ROLES.SUPER_ADMIN]);
 const canManage = hasRole([ROLES.SUPER_ADMIN, ROLES.CLUSTER_MANAGER]);

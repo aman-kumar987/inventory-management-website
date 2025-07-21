@@ -9,6 +9,7 @@ const pg = require('pg');
 const connectPgSimple = require('connect-pg-simple')(session);
 const csrf = require('csurf');
 const errorHandler = require('./src/middleware/errorHandler');
+const { isAuthenticated, isApproved } = require('./src/middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -97,19 +98,23 @@ const recoveryRoutes = require('./src/routes/recoveryRoutes');
 const logRoutes = require('./src/routes/logRoutes');
 const clusterUserRoutes = require('./src/routes/clusterUserRoutes');
 const dashboardRoutes = require('./src/routes/dashboardRoutes');
+
+// Public routes - in par koi check nahi lagega
 app.use('/', authRoutes);
-app.use('/users', userRoutes);
-app.use('/clusters', clusterRoutes);
-app.use('/plants', plantRoutes);
-app.use('/items', itemRoutes);
-app.use('/item-groups', itemGroupRoutes);
-app.use('/inventory', inventoryRoutes);
-app.use('/approvals', approvalRoutes);
-app.use('/consumption', consumptionRoutes);
-app.use('/recovery', recoveryRoutes);
-app.use('/admin/logs', logRoutes);
-app.use('/cluster/users', clusterUserRoutes);
-app.use('/dashboard', dashboardRoutes);
+
+// Protected routes - in sab par ab login aur approval, dono check honge
+app.use('/users', isAuthenticated, isApproved, userRoutes);
+app.use('/clusters', isAuthenticated, isApproved, clusterRoutes);
+app.use('/plants', isAuthenticated, isApproved, plantRoutes);
+app.use('/items', isAuthenticated, isApproved, itemRoutes);
+app.use('/item-groups', isAuthenticated, isApproved, itemGroupRoutes);
+app.use('/inventory', isAuthenticated, isApproved, inventoryRoutes);
+app.use('/approvals', isAuthenticated, isApproved, approvalRoutes);
+app.use('/consumption', isAuthenticated, isApproved, consumptionRoutes);
+app.use('/recovery', isAuthenticated, isApproved, recoveryRoutes);
+app.use('/admin/logs', isAuthenticated, isApproved, logRoutes);
+app.use('/cluster/users', isAuthenticated, isApproved, clusterUserRoutes);
+app.use('/dashboard', isAuthenticated, isApproved, dashboardRoutes);
 
 // --- 8. CORE APP ROUTES ---
 app.get('/', (req, res) => {

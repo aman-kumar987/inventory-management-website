@@ -1,41 +1,77 @@
-<!-- This view will be rendered inside layouts/approvals.ejs -->
-<div class="overflow-x-auto bg-white rounded-md shadow-sm">
-    <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="table-header">User Name</th>
-                <th class="table-header">Email</th>
-                <th class="table-header">Requested Role</th>
-                <th class="table-header">Plant</th>
-                <th class="table-header">Date Registered</th>
-                <th class="table-header text-center">Actions</th>
-            </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-            <% if (requests.length > 0) { %>
-                <% requests.forEach(request => { %>
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 font-medium text-gray-900"><%= request.name %></td>
-                        <td class="px-6 py-4 text-sm text-gray-500"><%= request.email %></td>
-                        <td class="px-6 py-4 text-sm">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                <%= request.role %>
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 text-sm text-gray-500"><%= request.plant.name %></td>
-                        <td class="px-6 py-4 text-sm text-gray-500"><%= new Date(request.createdAt).toLocaleDateString() %></td>
-                        <td class="px-6 py-4 text-center">
-                            <form action="/approvals/users/<%= request.id %>/process" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to ' + (event.submitter.value) + ' this user?');">
-                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                                <button type="submit" name="action" value="approve" class="btn-primary !py-1 !px-3 !text-xs !bg-green-600 !hover:bg-green-700">Approve</button>
-                                <button type="submit" name="action" value="reject" class="btn-secondary !py-1 !px-3 !text-xs !bg-red-600 !hover:bg-red-700 !text-white">Reject</button>
-                            </form>
-                        </td>
-                    </tr>
-                <% }) %>
-            <% } else { %>
-                <tr><td colspan="6" class="text-center p-6 text-gray-500">No new user registrations are pending approval.</td></tr>
-            <% } %>
-        </tbody>
-    </table>
+<%# NEW: Search Bar Added %>
+<div class="mb-6 rounded-lg">
+    <form action="/approvals/users" method="GET" class="flex items-center gap-2">
+        <div class="bg-white relative flex-grow">
+             <input type="text" name="search" placeholder="Search by Name or Email..."
+                   value="<%= searchTerm || '' %>" class="form-input w-full">
+        </div>
+        <button type="submit" class="btn-primary flex-shrink-0">Search</button>
+        <a href="/approvals/users" class="btn-secondary flex-shrink-0">Clear</a>
+    </form>
 </div>
+
+<div class="space-y-6">
+    <% if (requests.length > 0) { %>
+        <% requests.forEach(request => { %>
+            <div class="bg-white p-6 rounded-lg shadow-md border flex flex-col md:flex-row items-start md:items-center gap-6">
+                
+                <div class="flex-grow">
+                    <h3 class="text-lg font-semibold text-gray-800"><%= request.name %></h3>
+                    <p class="text-sm text-gray-500"><%= request.email %></p>
+                    <p class="text-xs text-gray-400 mt-1">
+                        Registered on: <%= new Date(request.createdAt).toLocaleDateString('en-IN') %>
+                    </p>
+                </div>
+
+                <form action="/approvals/users/<%= request.id %>/process" method="POST" class="w-full md:w-auto flex-shrink-0 flex flex-col md:flex-row items-end gap-4 approval-form">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    
+                    <div class="w-full md:w-48">
+                        <label class="form-label text-xs">Assign Role</label>
+                        <select name="role" class="form-input role-select">
+                            <% assignableRoles.forEach(role => { %>
+                                <option value="<%= role %>"><%= role.replace('_', ' ') %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    
+                    <div class="w-full md:w-48 plant-container">
+                        <label class="form-label text-xs">Assign Plant</label>
+                        <div class="relative plant-search-wrapper">
+                            <input type="text" class="form-input plant-search-input" placeholder="Search plant..." autocomplete="off">
+                            <input type="hidden" name="plantId" class="selected-plant-id approve-field">
+                            <ul class="plant-search-results absolute bottom-full mb-1 z-10 bg-white shadow-lg border w-full max-h-60 overflow-y-auto hidden"></ul>
+                        </div>
+                    </div>
+                    
+                    <div class="w-full md:w-48 cluster-container hidden">
+                        <label class="form-label text-xs">Assign Cluster</label>
+                        <div class="relative cluster-search-wrapper">
+                            <input type="text" class="form-input cluster-search-input" placeholder="Search cluster..." autocomplete="off">
+                            <input type="hidden" name="clusterId" class="selected-cluster-id approve-field">
+                            <ul class="cluster-search-results absolute bottom-full mb-1 z-10 bg-white shadow-lg border w-full max-h-60 overflow-y-auto hidden"></ul>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <button type="submit" name="action" value="approve" class="btn-primary w-full md:w-auto approve-btn" disabled>Approve</button>
+                        <button type="submit" name="action" value="reject" class="btn-secondary w-full md:w-auto" formnovalidate>Reject</button>
+                    </div>
+                </form>
+            </div>
+        <% }) %>
+    <% } else { %>
+        <div class="text-center p-10 bg-white rounded-lg shadow">
+            <%# UPDATED: Better message for when search returns no results %>
+            <% if (searchTerm) { %>
+                <p class="text-gray-500">No pending users found for your search.</p>
+            <% } else { %>
+                <p class="text-gray-500">There are no pending user approvals.</p>
+            <% } %>
+        </div>
+    <% } %>
+</div>
+
+<script id="plant-list-json" type="application/json"><%- JSON.stringify(plants) %></script>
+<script id="cluster-list-json" type="application/json"><%- JSON.stringify(clusters) %></script>
+<script src="/js/user-approval.js"></script>

@@ -1,0 +1,68 @@
+<div class="max-w-2xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800"><%= title %></h1>
+        </div>
+    </div>
+    <div class="bg-white p-8 rounded-lg shadow-md">
+        <form action="<%= user.id ? '/users/' + user.id + '/edit' : '/users/new' %>" method="POST">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <div class="space-y-6">
+                <div>
+                    <label class="form-label">Full Name</label>
+                    <input type="text" name="name" required class="form-input" value="<%= user.name || '' %>">
+                </div>
+                <div>
+                    <label class="form-label">Email</label>
+                    <input type="email" name="email" required class="form-input" value="<%= user.email || '' %>">
+                </div>
+                <div>
+                    <label class="form-label">Password</label>
+                    <input type="password" name="password" <%= !user.id ? 'required' : '' %> class="form-input" placeholder="<%= user.id ? 'Leave blank to keep same' : '' %>">
+                </div>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="form-label">Role</label>
+                        <select name="role" required class="form-input">
+                            <% for(const role of ['SUPER_ADMIN', 'CLUSTER_MANAGER', 'USER', 'VIEWER']) { %>
+                                <option value="<%= role %>" <%= (user.role === role) ? 'selected' : '' %>><%= role.replace('_', ' ') %></option>
+                            <% } %>
+                        </select>
+                    </div>
+                     <div>
+                        <label class="form-label">Status</label>
+                        <select name="status" required class="form-input">
+                            <% for(const status of ['ACTIVE', 'INACTIVE', 'PENDING_APPROVAL']) { %>
+                                <option value="<%= status %>" <%= (user.status === status) ? 'selected' : '' %>><%= status.replace('_', ' ') %></option>
+                            <% } %>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="form-label">Plant</label>
+                        <select name="plantId" class="form-input">
+                             <option value="">-- No Plant --</option>
+                            <% plants.forEach(plant => { %>
+                                <option value="<%= plant.id %>" <%= (user.plantId === plant.id) ? 'selected' : '' %>><%= plant.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Cluster (for Managers)</label>
+                        <select name="clusterId" class="form-input">
+                            <option value="">-- No Cluster --</option>
+                            <% clusters.forEach(cluster => { %>
+                                <option value="<%= cluster.id %>" <%= (user.clusterId === cluster.id) ? 'selected' : '' %>><%= cluster.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-8 flex gap-x-3">
+                <button type="submit" class="btn-primary flex-grow"><%= user.id ? 'Update User' : 'Create User' %></button>
+                <a href="/users" class="btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>

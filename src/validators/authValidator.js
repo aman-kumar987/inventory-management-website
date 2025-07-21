@@ -19,15 +19,23 @@ exports.validateLogin = [
 
 exports.validateRegister = [
     body('name')
-        .customSanitizer(value => sanitize(value)) // CHANGE: Sanitize first
+        .customSanitizer(value => sanitize(value))
         .trim()
         .notEmpty().withMessage('Name is required.'),
 
     body('email').isEmail().withMessage('Please provide a valid email.').normalizeEmail(),
+    
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long.'),
-    body('role').isIn(['USER', 'VIEWER', 'CLUSTER_MANAGER']).withMessage('Invalid role selected.'),
-    body('plantId').isUUID().withMessage('A valid plant must be selected.'),
+    
+    // Naya: Confirm Password ko check karein
+    body('confirmPassword').custom((value, { req }) => {
+        if (value !== req.body.password) {
+            throw new Error('Passwords do not match.');
+        }
+        return true;
+    }),
 
+    // Role aur PlantId ka validation hata diya gaya hai
     (req, res, next) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
