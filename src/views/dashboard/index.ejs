@@ -1,75 +1,75 @@
-<!-- ======================================================== -->
-<!--  DASHBOARD FILTER BAR -->
-<!-- ======================================================== -->
+<%# CHANGE 1: Naya 'Stock Type' filter add kiya gaya hai %>
 <div class="mb-6 p-4 bg-white rounded-lg shadow-sm border">
-    <form action="/dashboard" method="GET" id="dashboard-filter-form"
-        class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-        <!-- Plant Filter -->
+    <form action="/dashboard" method="GET" id="dashboard-filter-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         <div>
             <label for="plantId" class="form-label">Plant</label>
-            <% if (user.role==='USER' || user.role==='VIEWER' ) { %>
+            <% if (user.role === 'USER' || user.role === 'VIEWER' ) { %>
                 <input type="text" class="form-input" disabled value="<%= accessiblePlants[0]?.name || 'Your Plant' %>">
                 <input type="hidden" name="plantId" value="<%= accessiblePlants[0]?.id %>">
-                <% } else { %>
-                    <div class="relative w-full">
-                        <input id="plant-search-input" type="text" class="form-input plant-search-input"
-                            placeholder="Search plant..." autocomplete="off" value="<%= accessiblePlants.find(p => p.id === selectedPlantId)?.name || '' %>">
-                        <input type="hidden" id="selected-plant-id" name="plantId" value="<%= selectedPlantId || '' %>">
-                        <ul id="plant-search-results"
-                            class="absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden">
-                        </ul>
-                    </div>
-                    <% } %>
-
+            <% } else { %>
+                <div class="relative w-full">
+                    <input id="plant-search-input" type="text" class="form-input plant-search-input" placeholder="Search plant..." autocomplete="off" value="<%= accessiblePlants.find(p => p.id === selectedPlantId)?.name || '' %>">
+                    <input type="hidden" id="selected-plant-id" name="plantId" value="<%= selectedPlantId || '' %>">
+                    <ul id="plant-search-results" class="absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden"></ul>
+                </div>
+            <% } %>
         </div>
 
-        <!-- Data Type Filter -->
         <div>
             <label for="dataType" class="form-label">Show Stats For</label>
             <select name="dataType" id="dataType" class="form-input">
-                <option value="netStock" <%=dataType==='netStock' ? 'selected' : '' %>>Inventory</option>
-                <option value="consumed" <%=dataType==='consumed' ? 'selected' : '' %>>Consumption</option>
-                <option value="inventoryConsumptionDiff" <%=dataType==='inventoryConsumptionDiff' ? 'selected' : '' %>>Inventory - Consumption</option>
-
+                <option value="inventory" <%= dataType === 'inventory' ? 'selected' : '' %>>Inventory</option>
+                <option value="consumption" <%= dataType === 'consumption' ? 'selected' : '' %>>Consumption</option>
+                <%# "Inventory - Consumption" wala option hata diya gaya %>
             </select>
         </div>
 
-        <!-- Submit Button -->
+        <div id="stock-type-filter-container">
+            <label for="stockType" class="form-label">Stock Type</label>
+            <select name="stockType" id="stockType" class="form-input">
+                <option value="all" <%= stockType === 'all' ? 'selected' : '' %>>All Stock</option>
+                <option value="new" <%= stockType === 'new' ? 'selected' : '' %>>New</option>
+                <option value="oldUsed" <%= stockType === 'oldUsed' ? 'selected' : '' %>>Old & Used</option>
+                <option value="scrapped" <%= stockType === 'scrapped' ? 'selected' : '' %>>Scrapped</option>
+            </select>
+        </div>
+
         <div class="flex">
             <button type="submit" class="btn-primary w-full">Apply Filters</button>
         </div>
     </form>
 </div>
 
-<!-- ======================================================== -->
-<!--  STATISTICS CARDS -->
-<!-- ======================================================== -->
 <div>
     <h2 class="text-xl font-semibold text-gray-700 mb-4">
         <%= dataTitle %>
     </h2>
-    <% if (cardData.length> 0) { %>
+    <% if (cardData.length > 0) { %>
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            <% cardData.forEach(card=> { %>
-                <div
-                    class="bg-white p-6 rounded-lg shadow-lg text-center transform hover:-translate-y-1 transition-transform">
+            <% cardData.forEach(card => { %>
+                <%# CHANGE 2: Card ko clickable banane ke liye <a> tag add kiya gaya %>
+                <a href="/dashboard/summary?itemGroupId=<%= itemGroups.find(g => g.name === card.name)?.id %>&plantId=<%= selectedPlantId %>&dataType=<%= dataType %>&stockType=<%= stockType %>"
+                   class="block bg-white p-6 rounded-lg shadow-lg text-center transform hover:-translate-y-1 transition-transform hover:shadow-xl">
                     <h3 class="text-lg font-semibold text-gray-500">
                         <%= card.name %>
                     </h3>
                     <p class="text-5xl font-bold text-indigo-600 mt-2">
                         <%= card.value %>
                     </p>
-                </div>
-                <% }) %>
+                </a>
+            <% }) %>
         </div>
-        <% } else { %>
-            <div class="text-center p-10 bg-white rounded-lg shadow">
-                <p class="text-gray-500">No data available for the selected filters.</p>
-            </div>
-            <% } %>
+    <% } else { %>
+        <div class="text-center p-10 bg-white rounded-lg shadow">
+            <p class="text-gray-500">No data available for the selected filters.</p>
+        </div>
+    <% } %>
 </div>
 
 <script id="plant-list-json" type="application/json">
     <%- JSON.stringify(accessiblePlants) %>
 </script>
 <script src="/js/dashboard.js"></script>
+
+<%# CHANGE 3: Naya JavaScript add kiya gaya hai jo Stock Type filter ko hide/show karega %>
+<script src="/js/filter-disabler-dashboard.js"></script>

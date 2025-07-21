@@ -1,4 +1,5 @@
 const { body, validationResult } = require('express-validator');
+const { sanitize } = require('../utils/sanitizer');
 
 const handleValidationErrors = (req, res, next) => {
     const errors = validationResult(req);
@@ -11,9 +12,10 @@ const handleValidationErrors = (req, res, next) => {
 
 exports.validateItemGroup = [
     body('name')
+        .customSanitizer(value => sanitize(value)) // Sanitize first
         .trim()
-        .notEmpty().withMessage('Group name is required.')
-        .isLength({ min: 3 }).withMessage('Group name must be at least 3 characters long.'),
-
-    handleValidationErrors
+        .notEmpty().withMessage('Item group name cannot be empty.')
+        .isLength({ min: 3 }).withMessage('Item group name must be at least 3 characters long.'),
+    
+    handleValidationErrors // Added for consistency
 ];

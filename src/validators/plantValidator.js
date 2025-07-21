@@ -1,10 +1,10 @@
 const { body, validationResult } = require('express-validator');
+const { sanitize } = require('../utils/sanitizer'); // Import sanitizer
 
 const handleValidationErrors = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         req.session.flash = { type: 'error', message: errors.array()[0].msg };
-        // Redirect back to the page they came from, which is cleaner than re-rendering
         return res.redirect(req.headers.referer || '/plants');
     }
     next();
@@ -12,6 +12,7 @@ const handleValidationErrors = (req, res, next) => {
 
 exports.validatePlant = [
     body('name')
+        .customSanitizer(value => sanitize(value)) // CHANGE: Sanitize first
         .trim()
         .notEmpty().withMessage('Plant name is required.')
         .isLength({ min: 3 }).withMessage('Plant name must be at least 3 characters long.'),

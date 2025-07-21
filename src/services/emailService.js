@@ -78,3 +78,62 @@ exports.sendScrapRequestEmail = async (approver, requester, inventory) => {
     }
 };
 
+/**
+ * @desc    NEW: Sends an email to the original requester informing them their request was approved.
+ * @param {object} requestor - The user who made the request.
+ * @param {object} approval - The scrap approval record (ScrapApproval or ConsumptionScrapApproval).
+ * @param {string} itemCode - The item code related to the approval.
+ */
+exports.sendApprovalConfirmationEmail = async (requestor, approval, itemCode) => {
+    const mailOptions = {
+        from: `"Inventory App" <no-reply@inventory.com>`,
+        to: requestor.email,
+        subject: `✅ Your Scrap Request has been Approved`,
+        html: `
+            <div style="font-family: sans-serif; padding: 20px; color: #333;">
+                <h2>Request Approved</h2>
+                <p>Hello ${requestor.name},</p>
+                <p>Good news! Your scrap request for item <strong>${itemCode}</strong> with a quantity of <strong>${approval.requestedQty}</strong> has been approved.</p>
+                <p>The stock has been updated accordingly.</p>
+                <p>Thank you.</p>
+            </div>
+        `,
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`Approval confirmation email sent to: ${requestor.email}`);
+    } catch (error) {
+        console.error('Error sending approval confirmation email:', error);
+    }
+};
+
+/**
+ * @desc    NEW: Sends an email to the original requester informing them their request was rejected.
+ * @param {object} requestor - The user who made the request.
+ * @param {object} approval - The scrap approval record (ScrapApproval or ConsumptionScrapApproval).
+ * @param {string} itemCode - The item code related to the approval.
+ */
+exports.sendRejectionEmail = async (requestor, approval, itemCode) => {
+    const mailOptions = {
+        from: `"Inventory App" <no-reply@inventory.com>`,
+        to: requestor.email,
+        subject: `❌ Your Scrap Request has been Rejected`,
+        html: `
+            <div style="font-family: sans-serif; padding: 20px; color: #333;">
+                <h2>Request Rejected</h2>
+                <p>Hello ${requestor.name},</p>
+                <p>Unfortunately, your scrap request for item <strong>${itemCode}</strong> with a quantity of <strong>${approval.requestedQty}</strong> has been rejected.</p>
+                <p>No changes have been made to the stock.</p>
+                <p>If you have any questions, please contact your manager.</p>
+            </div>
+        `,
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`Rejection notification email sent to: ${requestor.email}`);
+    } catch (error) {
+        console.error('Error sending rejection email:', error);
+    }
+};

@@ -1,7 +1,7 @@
 const { prisma } = require('../config/db');
 
 /**
- * @desc Display the main dashboard with statistics cards.
+ * @desc Display the main dashboard with new, simplified logic.
  * @route GET /dashboard
  */
 exports.showDashboard = async (req, res, next) => {
@@ -9,198 +9,229 @@ exports.showDashboard = async (req, res, next) => {
         const { user } = req.session;
 
         // Get filter params
-        const selectedPlantId = req.query.plantId || 'all';
-        const dataType = req.query.dataType || 'netStock';
+        const plantFilter = req.query.plantId || 'all';
+        // 'inventory' ya 'consumption'
+        const dataType = req.query.dataType || 'inventory'; 
+        // Naya sub-filter: 'all', 'new', 'oldUsed', 'scrapped'
+        const stockTypeFilter = req.query.stockType || 'all'; 
 
-        // Step 1: Determine accessible plants based on role
-        let plantScope = {};
+        // --- Step 1: Accessible Plants ko Determine Karein (Logic wahi hai) ---
+        let plantScope = { isDeleted: false };
         if (user.role === 'CLUSTER_MANAGER') {
-            plantScope = { clusterId: user.clusterId, isDeleted: false };
+            plantScope.clusterId = user.clusterId;
         } else if (user.role === 'USER' || user.role === 'VIEWER') {
-            plantScope = { id: user.plantId, isDeleted: false };
-        } else {
-            plantScope = { isDeleted: false };
+            plantScope.id = user.plantId;
         }
 
-        const accessiblePlants = await prisma.plant.findMany({
-            where: plantScope,
-            orderBy: { name: 'asc' }
-        });
-
-        // Step 2: Add "All" option if user is not a USER/VIEWER
-        const includeAllOption = user.role !== 'USER' && user.role !== 'VIEWER';
-        if (includeAllOption) {
+        const accessiblePlants = await prisma.plant.findMany({ where: plantScope, orderBy: { name: 'asc' } });
+        if (user.role !== 'USER' && user.role !== 'VIEWER') {
             accessiblePlants.unshift({ id: 'all', name: 'All Plants' });
         }
+        const accessiblePlantIds = accessiblePlants.map(p => p.id).filter(id => id !== 'all');
 
+        // --- Step 2: Main data fetching logic ---
         let dataTitle = '';
         let cardData = [];
+        const itemGroups = await prisma.itemGroup.findMany({ where: { isDeleted: false } });
+        const itemGroupMap = new Map(itemGroups.map(g => [g.id, { name: g.name, value: 0 }]));
 
-        // Step 3: Aggregation filter base
-        const filter = {
+        // Base filter jo dono views mein lagega
+        const baseWhere = {
             isDeleted: false,
-            item: { isDeleted: false }
+            item: { isDeleted: false, itemGroup: { isDeleted: false } },
         };
-
-        if (selectedPlantId !== 'all') {
-            filter.plantId = selectedPlantId;
+        if (plantFilter !== 'all') {
+            baseWhere.plantId = plantFilter;
         } else if (user.role === 'CLUSTER_MANAGER') {
-            filter.plant = { clusterId: user.clusterId };
+            baseWhere.plant = { clusterId: user.clusterId };
+        } else if (user.role === 'USER' || user.role === 'VIEWER') {
+            baseWhere.plantId = user.plantId;
         }
 
-        // ========== CASE 1: Net Available Stock ==========
-        if (dataType === 'netStock') {
-            dataTitle = 'Net Available Stock';
 
-            const stocks = await prisma.currentStock.findMany({
-                where: {
-                    ...filter,
-                    item: { isDeleted: false, itemGroup: { isDeleted: false } }
-                },
-                include: {
-                    item: {
-                        select: { itemGroupId: true }
+        if (dataType === 'inventory') {
+            dataTitle = 'Available Inventory';
+            if (stockTypeFilter !== 'all') {
+                dataTitle += ` (${stockTypeFilter.charAt(0).toUpperCase() + stockTypeFilter.slice(1)})`;
+            }
+
+            if (stockTypeFilter === 'scrapped') {
+                // Scrapped ke liye humein Inventory table se data lena hoga
+                const scrappedData = await prisma.inventory.groupBy({
+                    by: ['itemId'],
+                    where: baseWhere,
+                    _sum: { scrappedQty: true },
+                });
+                const itemIds = scrappedData.map(d => d.itemId);
+                const items = await prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, itemGroupId: true } });
+                const itemToGroupMap = new Map(items.map(i => [i.id, i.itemGroupId]));
+                
+                scrappedData.forEach(item => {
+                    const groupId = itemToGroupMap.get(item.itemId);
+                    if (groupId && itemGroupMap.has(groupId)) {
+                        itemGroupMap.get(groupId).value += item._sum.scrappedQty || 0;
                     }
-                }
-            });
+                });
 
-            const grouped = stocks.reduce((acc, stock) => {
-                const groupId = stock.item.itemGroupId;
-                acc[groupId] = (acc[groupId] || 0) + stock.totalQty;
-                return acc;
-            }, {});
+            } else {
+                // New, OldUsed, ya All ke liye CurrentStock se data lenge
+                const stockData = await prisma.currentStock.findMany({
+                    where: baseWhere,
+                    include: { item: { select: { itemGroupId: true } } }
+                });
 
-            const aggregationResult = Object.entries(grouped).map(([itemGroupId, sum]) => ({
-                itemGroupId,
-                _sum: { totalQty: sum }
-            }));
-
-            const itemGroupIds = aggregationResult.map(d => d.itemGroupId);
-            const itemGroups = await prisma.itemGroup.findMany({ where: { id: { in: itemGroupIds } } });
-            const itemGroupMap = new Map(itemGroups.map(g => [g.id, g.name]));
-
-            cardData = aggregationResult.map(d => ({
-                name: itemGroupMap.get(d.itemGroupId) || 'Unknown Group',
-                value: d._sum.totalQty
-            }));
-
-            // ========== CASE 2: Inventory - Consumption ==========
-        } else if (dataType === 'inventoryConsumptionDiff') {
-            dataTitle = 'Inventory - Consumption';
-
-            // Step 1: Fetch inventory grouped by itemGroupId
-            const inventory = await prisma.currentStock.findMany({
-                where: {
-                    ...filter,
-                    item: { isDeleted: false, itemGroup: { isDeleted: false } }
-                },
-                include: {
-                    item: {
-                        select: { itemGroupId: true }
+                stockData.forEach(stock => {
+                    const group = itemGroupMap.get(stock.item.itemGroupId);
+                    if (group) {
+                        if (stockTypeFilter === 'new') {
+                            group.value += stock.newQty;
+                        } else if (stockTypeFilter === 'oldUsed') {
+                            group.value += stock.oldUsedQty;
+                        } else { // 'all'
+                            group.value += stock.newQty + stock.oldUsedQty;
+                        }
                     }
-                }
-            });
+                });
+            }
 
-            const inventoryGrouped = {};
-            inventory.forEach(entry => {
-                const groupId = entry.item.itemGroupId;
-                if (groupId) {
-                    inventoryGrouped[groupId] = (inventoryGrouped[groupId] || 0) + entry.totalQty;
-                }
-            });
-
-            // Step 2: Fetch consumption grouped by itemGroupId
-            const consumption = await prisma.consumption.findMany({
+        } else { // dataType === 'consumption'
+            dataTitle = 'Net Consumption';
+            const consumptionData = await prisma.consumption.groupBy({
+                by: ['itemId'],
                 where: {
-                    ...filter,
-                    item: { isDeleted: false, itemGroup: { isDeleted: false } }
+                    ...baseWhere,
+                    oldAndReceived: false // True consumption
                 },
-                include: {
-                    item: {
-                        select: { itemGroupId: true }
-                    }
+                _sum: { quantity: true },
+            });
+
+            const itemIds = consumptionData.map(d => d.itemId);
+            const items = await prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, itemGroupId: true } });
+            const itemToGroupMap = new Map(items.map(i => [i.id, i.itemGroupId]));
+
+            consumptionData.forEach(item => {
+                const groupId = itemToGroupMap.get(item.itemId);
+                if (groupId && itemGroupMap.has(groupId)) {
+                    itemGroupMap.get(groupId).value += item._sum.quantity || 0;
                 }
             });
-
-            const consumptionGrouped = {};
-            consumption.forEach(entry => {
-                const groupId = entry.item.itemGroupId;
-                if (groupId) {
-                    consumptionGrouped[groupId] = (consumptionGrouped[groupId] || 0) + entry.quantity;
-                }
-            });
-
-            // Step 3: Combine both groups
-            const allGroupIds = new Set([
-                ...Object.keys(inventoryGrouped),
-                ...Object.keys(consumptionGrouped)
-            ]);
-
-            const itemGroups = await prisma.itemGroup.findMany({
-                where: { id: { in: [...allGroupIds] } }
-            });
-
-            const itemGroupMap = new Map(itemGroups.map(g => [g.id, g.name]));
-
-            cardData = Array.from(allGroupIds).map(groupId => {
-                const inventoryQty = inventoryGrouped[groupId] || 0;
-                const consumedQty = consumptionGrouped[groupId] || 0;
-                return {
-                    name: itemGroupMap.get(groupId) || 'Unknown Group',
-                    value: inventoryQty - consumedQty
-                };
-            });
-        // ========== CASE 3: Total Consumed ==========
-        } else {
-            dataTitle = 'Total Consumed';
-
-            const consumptions = await prisma.consumption.findMany({
-                where: {
-                    ...filter,
-                    item: { isDeleted: false, itemGroup: { isDeleted: false } }
-                },
-                include: {
-                    item: {
-                        select: { itemGroupId: true }
-                    }
-                }
-            });
-
-            const grouped = consumptions.reduce((acc, entry) => {
-                if (entry.item.itemGroupId) {
-                    const groupId = entry.item.itemGroupId;
-                    acc[groupId] = (acc[groupId] || 0) + entry.quantity;
-                }
-                return acc;
-            }, {});
-
-            const aggregationResult = Object.entries(grouped).map(([itemGroupId, sum]) => ({
-                itemGroupId,
-                _sum: { quantity: sum }
-            }));
-
-            const itemGroupIds = aggregationResult.map(d => d.itemGroupId);
-            const itemGroups = await prisma.itemGroup.findMany({ where: { id: { in: itemGroupIds } } });
-            const itemGroupMap = new Map(itemGroups.map(g => [g.id, g.name]));
-
-            cardData = aggregationResult.map(d => ({
-                name: itemGroupMap.get(d.itemGroupId) || 'Unknown Group',
-                value: d._sum.quantity || 0
-            }));
         }
+
+        cardData = Array.from(itemGroupMap.values());
 
         res.render('dashboard/index', {
             title: 'Dashboard',
             accessiblePlants,
-            selectedPlantId,
+            selectedPlantId: plantFilter,
             dataType,
+            stockType: stockTypeFilter,
             dataTitle,
             cardData,
-            user
+            user,
+            itemGroups // Pass item groups for card links
         });
 
     } catch (error) {
-        console.error('Dashboard Error:', error);
+        next(error);
+    }
+};
+
+
+/**
+ * @desc Display the drill-down summary for a specific Item Group, with filters and view modes.
+ * @route GET /dashboard/summary
+ */
+exports.getGroupSummary = async (req, res, next) => {
+    try {
+        const { user } = req.session;
+        // CHANGE: Ab hum 'plantId' ke bajaye 'search' term lenge
+        const { itemGroupId, search = '', dataType = 'inventory' } = req.query;
+
+        if (!itemGroupId) { /* ... error handling ... */ }
+        const itemGroup = await prisma.itemGroup.findUnique({ where: { id: itemGroupId } });
+        if (!itemGroup) { /* ... error handling ... */ }
+
+        // --- Accessible Plants (ab filter ke liye zaroori nahi, lekin aage kaam aa sakta hai) ---
+        let plantScope = { isDeleted: false };
+        if (user.role === 'CLUSTER_MANAGER') plantScope.clusterId = user.clusterId;
+        else if (user.role === 'USER' || user.role === 'VIEWER') plantScope.id = user.plantId;
+        const accessiblePlants = await prisma.plant.findMany({ where: plantScope, orderBy: { name: 'asc' } });
+        if (user.role !== 'USER' && user.role !== 'VIEWER') {
+            accessiblePlants.unshift({ id: 'all', name: 'All Plants' });
+        }
+        
+        // --- Data Fetching Logic (Updated with Search) ---
+        let summaryData = [];
+        let viewTitle = '';
+
+        // CHANGE: Base filter mein ab search logic hai
+        const baseWhere = {
+            isDeleted: false,
+            item: {
+                itemGroupId: itemGroupId,
+                isDeleted: false
+            }
+        };
+
+        if (search) {
+            baseWhere.OR = [
+                { plant: { name: { contains: search, mode: 'insensitive' } } },
+                { item: { item_code: { contains: search, mode: 'insensitive' } } },
+                { item: { item_description: { contains: search, mode: 'insensitive' } } }
+            ];
+        }
+
+        if (dataType === 'consumption') {
+            // ... (consumption logic waisa hi hai, bas naya baseWhere use karega)
+            viewTitle = `Consumption Summary for ${itemGroup.name}`;
+            const consumptions = await prisma.consumption.groupBy({
+                by: ['plantId', 'itemId'],
+                where: { ...baseWhere, oldAndReceived: false },
+                _sum: { quantity: true },
+            });
+            // ... (baaki ka mapping logic waisa hi hai)
+             const items = await prisma.item.findMany({ where: { id: { in: consumptions.map(c => c.itemId) } } });
+            const plants = await prisma.plant.findMany({ where: { id: { in: consumptions.map(c => c.plantId) } } });
+            const itemMap = new Map(items.map(i => [i.id, i]));
+            const plantMap = new Map(plants.map(p => [p.id, p]));
+            summaryData = consumptions.map(c => ({
+                plantId: c.plantId, itemId: c.itemId,
+                plantName: plantMap.get(c.plantId)?.name || 'N/A',
+                itemCode: itemMap.get(c.itemId)?.item_code || 'N/A',
+                itemDescription: itemMap.get(c.itemId)?.item_description || '-',
+                uom: itemMap.get(c.itemId)?.uom || 'N/A',
+                consumed: c._sum.quantity || 0,
+            }));
+
+        } else { // 'inventory' view
+            // ... (inventory logic waisa hi hai, bas naya baseWhere use karega)
+            viewTitle = `Inventory Summary for ${itemGroup.name}`;
+            const liveStocks = await prisma.currentStock.findMany({ where: baseWhere, include: { item: true, plant: true } });
+            const consumptionData = await prisma.consumption.groupBy({ by: ['itemId', 'plantId'], where: { ...baseWhere, oldAndReceived: false }, _sum: { quantity: true } });
+            const consumptionMap = new Map(consumptionData.map(c => [`${c.plantId}-${c.itemId}`, c._sum.quantity || 0]));
+            summaryData = liveStocks.map(stock => ({
+                plantName: stock.plant.name,
+                itemCode: stock.item.item_code,
+                itemDescription: stock.item.item_description,
+                uom: stock.item.uom,
+                newQty: stock.newQty,
+                oldUsedQty: stock.oldUsedQty,
+                consumed: consumptionMap.get(`${stock.plantId}-${stock.itemId}`) || 0,
+                netAvailable: stock.newQty + stock.oldUsedQty,
+            }));
+        }
+        
+        res.render('dashboard/summary', {
+            title: viewTitle,
+            summaryData,
+            itemGroup,
+            user,
+            accessiblePlants,
+            filters: req.query,
+            dataType
+        });
+
+    } catch (error) {
         next(error);
     }
 };

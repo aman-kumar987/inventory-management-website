@@ -7,5 +7,6 @@ const { isAuthenticated } = require('../middleware/auth');
 router.use(isAuthenticated);
 
 router.get('/', dashboardController.showDashboard);
+router.get('/summary', dashboardController.getGroupSummary);
 
 module.exports = router;

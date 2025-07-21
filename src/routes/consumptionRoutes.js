@@ -25,5 +25,5 @@ router.post('/:id/edit', isAuthenticated, canEditConsumption, consumptionControl
 router.post('/:id/delete', canEditConsumption, consumptionController.softDeleteConsumption); // For a future delete button
 
 router.get('/export', canExport, consumptionController.exportConsumptions);
-
+router.get('/details', consumptionController.showConsumptionDetails);
 module.exports = router;

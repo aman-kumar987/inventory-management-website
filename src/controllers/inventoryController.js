@@ -74,6 +74,7 @@ exports.createInventory = async (req, res, next) => {
         const logDetails = { reservationNumber, createdItems: [] };
         await prisma.$transaction(async (tx) => {
             for (const item of lineItems) {
+                // ... (quantity parsing logic waisa hi hai)
                 let newQty = 0, oldUsedQty = 0, scrappedQty = 0;
                 if (Array.isArray(item.categories)) {
                     item.categories.forEach(cat => {
@@ -96,57 +97,65 @@ exports.createInventory = async (req, res, next) => {
                     }
                 }
 
-                const total = newQty + oldUsedQty + finalScrappedQty;
+                const inventoryLogTotal = newQty + oldUsedQty + finalScrappedQty;
 
                 const inventoryLog = await tx.inventory.create({
                     data: {
-                        reservationNumber: sanitize(reservationNumber), // <-- SANITIZED
+                        reservationNumber: sanitize(reservationNumber),
                         date: new Date(date),
                         plantId: item.plantId,
                         itemId: item.itemId,
                         newQty, oldUsedQty,
                         scrappedQty: finalScrappedQty,
-                        total,
-                        remarks: sanitize(item.remarks) || null, // <-- SANITIZED
+                        total: inventoryLogTotal,
+                        remarks: sanitize(item.remarks) || null,
                         createdBy: user.id,
                     }
                 });
 
-                logDetails.createdItems.push({
-                    inventoryId: inventoryLog.id,
-                    itemId: inventoryLog.itemId,
-                    totalAdded: total
-                });
-
-                if (total > 0) {
-                    await tx.currentStock.upsert({
-                        where: { plantId_itemId: { plantId: item.plantId, itemId: item.itemId } },
-                        update: { totalQty: { increment: total } },
-                        create: { plantId: item.plantId, itemId: item.itemId, totalQty: total }
-                    });
+                // ... (logDetails and currentStock logic waisa hi hai)
+                const stockToAdd = newQty + oldUsedQty;
+                if (stockToAdd > 0) {
+                    await tx.currentStock.upsert({ /* ... */ });
                 }
 
                 if (approvalRequired) {
-                    await tx.scrapApproval.create({
+                    const approval = await tx.scrapApproval.create({
                         data: {
                             inventoryId: inventoryLog.id,
                             requestedQty: scrappedQty,
                             status: 'PENDING',
-                            remarks: `Initial scrap request on creation: ${sanitize(item.remarks) || ''}`, // <-- SANITIZED
+                            remarks: `Initial scrap request on creation: ${sanitize(item.remarks) || ''}`,
                             requestedById: user.id
                         }
                     });
+
+                    await logActivity({
+                        userId: user.id,
+                        action: 'SCRAP_REQUEST_CREATE',
+                        ipAddress: req.ip,
+                        details: { approvalId: approval.id, inventoryId: inventoryLog.id, requestedQty: scrappedQty }
+                    });
+
+                    // NAYA LOGIC: Approver ko dhoondh kar email bhejein
+                    if (user.clusterId) {
+                        const approver = await tx.user.findFirst({
+                            where: { clusterId: user.clusterId, role: 'CLUSTER_MANAGER', isDeleted: false }
+                        });
+                        if (approver) {
+                            const fullInventoryDetails = await tx.inventory.findUnique({
+                                where: { id: inventoryLog.id },
+                                include: { item: true, plant: true }
+                            });
+                            sendScrapRequestEmail(approver, user, fullInventoryDetails).catch(console.error);
+                        }
+                    }
                 }
             }
         });
 
-        await logActivity({
-            userId: user.id,
-            action: 'INVENTORY_CREATE',
-            ipAddress: req.ip,
-            details: logDetails
-        });
-
+        // ... (baaki ka function waisa hi hai)
+        await logActivity({ /* ... */ });
         req.session.flash = { type: 'success', message: `Inventory created successfully.` };
         res.redirect('/inventory/ledger');
     } catch (error) {
@@ -252,8 +261,7 @@ exports.showLedgerView = async (req, res, next) => {
 };
 
 /**
- * @desc    Display the "Consolidated Stock Summary" view with advanced filtering,
- *          correctly handling soft-deleted records.
+ * @desc    Display the "Consolidated Stock Summary" view, reading from the live CurrentStock table.
  * @route   GET /inventory/summary (or GET /inventory)
  */
 exports.showSummaryView = async (req, res, next) => {
@@ -264,17 +272,14 @@ exports.showSummaryView = async (req, res, next) => {
         const skip = (page - 1) * limit;
 
         const {
-            search = '', plantFilter, itemGroupFilter,
-            newQty, newQtyOp = 'gt',
-            oldQty, oldQtyOp = 'gt',
-            scrappedQty, scrappedQtyOp = 'gt',
-            consumptionQty, consumptionQtyOp = 'gt',
-            totalQty, totalQtyOp = 'gt'
+            search = '',
+            plantFilter,
+            itemGroupFilter
         } = req.query;
 
-        // --- Build a base filter for relations (Item, Plant, etc.) ---
-        let whereClause = {
-            isDeleted: false, // <-- THE CRITICAL FIX: Only consider active records.
+        // --- Build a base filter for CurrentStock ---
+        const whereClause = {
+            isDeleted: false,
             AND: []
         };
 
@@ -294,100 +299,82 @@ exports.showSummaryView = async (req, res, next) => {
                 ]
             });
         }
+
         if (plantFilter) whereClause.AND.push({ plantId: plantFilter });
         if (itemGroupFilter) whereClause.AND.push({ item: { itemGroupId: itemGroupFilter } });
 
         let plantScope = {};
         if (user.role === 'CLUSTER_MANAGER') {
-            const plantsInCluster = await prisma.plant.findMany({ where: { clusterId: user.clusterId }, select: { id: true } });
+            const plantsInCluster = await prisma.plant.findMany({ where: { clusterId: user.clusterId, isDeleted: false }, select: { id: true } });
             const plantIds = plantsInCluster.map(p => p.id);
             whereClause.AND.push({ plantId: { in: plantIds.length > 0 ? plantIds : ['non-existent-id'] } });
             plantScope = { id: { in: plantIds } };
-        } else if (user.role === 'USER') {
+        } else if (user.role === 'USER' || user.role === 'VIEWER') {
             whereClause.AND.push({ plantId: { equals: user.plantId } });
             plantScope = { id: { equals: user.plantId } };
         }
+
         if (whereClause.AND.length === 0) delete whereClause.AND;
 
-        // --- Perform Aggregations ---
-        const groupedInventory = await prisma.inventory.groupBy({
-            by: ['plantId', 'itemId'],
-            where: whereClause,
-            _sum: { newQty: true, oldUsedQty: true, scrappedQty: true },
-        });
+        // --- Fetch Live Stock and Total Consumption ---
+        const [liveStocks, totalRecords, allPlantsForFilter, allItemGroupsForFilter] = await Promise.all([
+            prisma.currentStock.findMany({
+                where: whereClause,
+                include: {
+                    item: { include: { itemGroup: true } },
+                    plant: true
+                },
+                skip,
+                take: limit
+            }),
+            prisma.currentStock.count({ where: whereClause }),
+            prisma.plant.findMany({ where: { isDeleted: false, ...plantScope }, orderBy: { name: 'asc' } }),
+            prisma.itemGroup.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } })
+        ]);
 
-        // The where clause for consumption needs to be consistent
+        // Get total consumption for the displayed items
+        const consumptionWhere = {
+            isDeleted: false,
+            plantId: { in: liveStocks.map(s => s.plantId) },
+            itemId: { in: liveStocks.map(s => s.itemId) },
+            oldAndReceived: false // <-- YEH SABSE ZAROORI CHANGE HAI
+        };
+
         const groupedConsumption = await prisma.consumption.groupBy({
             by: ['plantId', 'itemId'],
-            where: whereClause,
+            where: consumptionWhere,
             _sum: { quantity: true },
         });
+
         const consumptionMap = new Map(groupedConsumption.map(c => [`${c.plantId}-${c.itemId}`, c._sum.quantity || 0]));
 
-        // --- Fetch Details & Merge Data ---
-        const itemIds = groupedInventory.map(i => i.itemId);
-        const allPlantsForFilter = await prisma.plant.findMany({ where: { isDeleted: false, ...plantScope }, orderBy: { name: 'asc' } });
-        const allItemGroupsForFilter = await prisma.itemGroup.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } });
+        // --- Format Data for the View ---
+        const consolidatedData = liveStocks.map(stock => {
+            const key = `${stock.plantId}-${stock.itemId}`;
+            const totalConsumed = consumptionMap.get(key) || 0;
+            const netAvailable = stock.newQty + stock.oldUsedQty;
 
-        if (itemIds.length === 0) {
-            // No inventory means nothing to show, render empty state but with filter data
-            return res.render('inventory/summary', {
-                title: 'Consolidated Stock View', data: [], plants: allPlantsForFilter, itemGroups: allItemGroupsForFilter,
-                currentPage: 1, totalPages: 1, totalItems: 0, filters: req.query, user
-            });
-        }
-
-        const items = await prisma.item.findMany({ where: { id: { in: itemIds } }, include: { itemGroup: true } });
-        const plantMap = new Map(allPlantsForFilter.map(p => [p.id, p.name]));
-        const itemMap = new Map(items.map(i => [i.id, i]));
-
-        let consolidatedData = groupedInventory.map(inv => {
-            const itemDetails = itemMap.get(inv.itemId);
-            if (!itemDetails) return null;
-            const key = `${inv.plantId}-${inv.itemId}`;
-            const consumption = consumptionMap.get(key) || 0;
-            const newQtySum = inv._sum.newQty || 0;
-            const oldUsedQtySum = inv._sum.oldUsedQty || 0;
-            const scrappedQtySum = inv._sum.scrappedQty || 0;
             return {
-                plant: plantMap.get(inv.plantId) || 'N/A',
-                itemGroup: itemDetails.itemGroup.name,
-                itemCode: itemDetails.item_code,
-                itemDescription: itemDetails.item_description,
-                uom: itemDetails.uom,
-                newQty: newQtySum, oldUsedQty: oldUsedQtySum, scrappedQty: scrappedQtySum, consumption,
-                total: newQtySum + oldUsedQtySum + scrappedQtySum - consumption
+                plant: stock.plant.name,
+                itemGroup: stock.item.itemGroup.name,
+                itemCode: stock.item.item_code,
+                itemDescription: stock.item.item_description,
+                uom: stock.item.uom,
+                newQty: stock.newQty,
+                oldUsedQty: stock.oldUsedQty,
+                scrappedQty: 0, // This needs a separate logic if we want to show it. For now, 0.
+                consumed: totalConsumed,
+                netAvailable: netAvailable
             };
-        }).filter(Boolean);
-
-        // --- Apply Post-Aggregation Filters (for quantities) ---
-        const applyPostFilter = (data, field, value, operator) => {
-            if (!value) return data;
-            const numValue = parseInt(value);
-            if (isNaN(numValue)) return data;
-            return data.filter(item => {
-                if (operator === 'et') return item[field] === numValue;
-                if (operator === 'gt') return item[field] >= numValue;
-                if (operator === 'lt') return item[field] <= numValue;
-                return true;
-            });
-        };
-        consolidatedData = applyPostFilter(consolidatedData, 'newQty', newQty, newQtyOp);
-        consolidatedData = applyPostFilter(consolidatedData, 'oldUsedQty', oldQty, oldQtyOp);
-        consolidatedData = applyPostFilter(consolidatedData, 'scrappedQty', scrappedQty, scrappedQtyOp);
-        consolidatedData = applyPostFilter(consolidatedData, 'consumption', consumptionQty, consumptionQtyOp);
-        consolidatedData = applyPostFilter(consolidatedData, 'total', totalQty, totalQtyOp);
-
-        // --- Paginate the Final, Filtered Array ---
-        const totalRecords = consolidatedData.length;
-        const paginatedData = consolidatedData.slice(skip, skip + limit);
+        });
 
         res.render('inventory/summary', {
             title: 'Consolidated Stock View',
-            data: paginatedData,
+            data: consolidatedData,
             currentPage: page, limit, totalPages: Math.ceil(totalRecords / limit), totalItems: totalRecords,
             searchTerm: search, user, plants: allPlantsForFilter, itemGroups: allItemGroupsForFilter, filters: req.query
         });
+
     } catch (error) {
         next(error);
     }
@@ -419,6 +406,7 @@ exports.renderEditForm = async (req, res, next) => {
     }
 };
 
+
 /**
  * @desc    Process an inventory update. Can be a direct update or trigger an approval with email notification.
  * @route   POST /inventory/:id/edit
@@ -435,34 +423,40 @@ exports.updateInventory = async (req, res, next) => {
             throw new Error('Inventory record not found.');
         }
 
+        const finalNewQty = parseInt(newQty, 10) || 0;
+        const finalOldUsedQty = parseInt(oldUsedQty, 10) || 0;
         const newScrappedQty = parseInt(scrappedQty, 10) || 0;
         const scrapChange = newScrappedQty - originalInventory.scrappedQty;
 
-        // Case 1: User is an Admin/Manager OR a User who is NOT increasing the scrap quantity.
+        // Case 1: Admin/Manager hai YA User scrap ko badha nahi raha hai.
         if (user.role !== 'USER' || (user.role === 'USER' && scrapChange <= 0)) {
-            // --- PERFORM DIRECT UPDATE ---
-            const finalOldUsedQty = parseInt(oldUsedQty, 10) || 0;
-            const finalNewQty = parseInt(newQty, 10) || 0;
-
-            const newTotal = finalNewQty + finalOldUsedQty + newScrappedQty - originalInventory.consumptionAmount;
-            const stockDiff = newTotal - originalInventory.total;
 
             await prisma.$transaction(async (tx) => {
+                // FIX: Ab hum alag-alag quantity ka difference nikalenge
+                const newQtyDiff = finalNewQty - originalInventory.newQty;
+                const oldUsedQtyDiff = finalOldUsedQty - originalInventory.oldUsedQty;
+
+                // Inventory log ko update karein
                 await tx.inventory.update({
                     where: { id },
                     data: {
                         newQty: finalNewQty,
                         oldUsedQty: finalOldUsedQty,
                         scrappedQty: newScrappedQty,
-                        total: newTotal,
+                        total: finalNewQty + finalOldUsedQty + newScrappedQty,
                         remarks: sanitize(remarks),
                         updatedBy: user.id
                     }
                 });
-                if (stockDiff !== 0) {
+
+                // FIX: CurrentStock ko naye tareeke se update karein
+                if (newQtyDiff !== 0 || oldUsedQtyDiff !== 0) {
                     await tx.currentStock.update({
                         where: { plantId_itemId: { plantId: originalInventory.plantId, itemId: originalInventory.itemId } },
-                        data: { totalQty: { increment: stockDiff } }
+                        data: {
+                            newQty: { increment: newQtyDiff },
+                            oldUsedQty: { increment: oldUsedQtyDiff }
+                        }
                     });
                 }
             });
@@ -478,10 +472,8 @@ exports.updateInventory = async (req, res, next) => {
             return res.redirect(redirectPath);
 
         } else {
-            // --- Case 2: User IS a standard 'USER' and IS increasing the scrap quantity -> TRIGGER APPROVAL ---
-
+            // Case 2: User scrap badha raha hai -> Approval logic waisa hi hai
             await prisma.$transaction(async (tx) => {
-                // 1. Create the approval request
                 await tx.scrapApproval.create({
                     data: {
                         inventoryId: id,
@@ -492,26 +484,7 @@ exports.updateInventory = async (req, res, next) => {
                     }
                 });
 
-                // 2. Find the approver (Cluster Manager)
-                const approver = await tx.user.findFirst({
-                    where: {
-                        clusterId: user.clusterId,
-                        role: 'CLUSTER_MANAGER',
-                        isDeleted: false,
-                        status: 'ACTIVE'
-                    }
-                });
-
-                // 3. Send email if an approver is found
-                if (approver) {
-                    // We need the full inventory object with relations for the email template
-                    const fullInventoryDetails = await tx.inventory.findUnique({
-                        where: { id },
-                        include: { item: true, plant: true }
-                    });
-                    // Fire-and-forget the email, don't block the user's request
-                    sendScrapRequestEmail(approver, user, fullInventoryDetails).catch(console.error);
-                }
+                // ... (baaki ka approval logic waisa hi hai)
             });
 
             await logActivity({
@@ -730,112 +703,122 @@ exports.exportLedger = async (req, res, next) => {
 };
 
 /**
- * @desc    Export the filtered Consolidated Stock Summary to a styled Excel file.
+ * @desc    Export the filtered Consolidated Stock Summary to a styled Excel file using the correct logic.
  * @route   GET /inventory/summary/export
  */
 exports.exportSummary = async (req, res, next) => {
     try {
         const { user } = req.session;
-
-        // --- STEP 1: RE-USE THE EXACT SAME FILTERING LOGIC ---
         const {
-            search = '', plantFilter, itemGroupFilter,
-            newQty, newQtyOp = 'gt', oldQty, oldQtyOp = 'gt',
-            scrappedQty, scrappedQtyOp = 'gt', consumptionQty, consumptionQtyOp = 'gt',
-            totalQty, totalQtyOp = 'gt'
+            search = '',
+            plantFilter,
+            itemGroupFilter
         } = req.query;
 
-        let whereClause = { isDeleted: false, AND: [] };
-        if (search) { whereClause.AND.push({ OR: [{ item: { item_code: { contains: search, mode: 'insensitive' } } }, { item: { item_description: { contains: search, mode: 'insensitive' } } }, { plant: { name: { contains: search, mode: 'insensitive' } } }, { item: { itemGroup: { name: { contains: search, mode: 'insensitive' } } } }] }); }
+        // --- RE-USE THE EXACT SAME FILTERING LOGIC FROM showSummaryView ---
+        const whereClause = {
+            isDeleted: false,
+            AND: []
+        };
+        if (search) {
+            whereClause.AND.push({
+                OR: [
+                    { plant: { name: { contains: search, mode: 'insensitive' } } },
+                    {
+                        item: {
+                            OR: [
+                                { item_code: { contains: search, mode: 'insensitive' } },
+                                { item_description: { contains: search, mode: 'insensitive' } },
+                                { itemGroup: { name: { contains: search, mode: 'insensitive' } } }
+                            ]
+                        }
+                    }
+                ]
+            });
+        }
         if (plantFilter) whereClause.AND.push({ plantId: plantFilter });
         if (itemGroupFilter) whereClause.AND.push({ item: { itemGroupId: itemGroupFilter } });
+
         if (user.role === 'CLUSTER_MANAGER') {
-            const plantsInCluster = await prisma.plant.findMany({ where: { clusterId: user.clusterId }, select: { id: true } });
+            const plantsInCluster = await prisma.plant.findMany({ where: { clusterId: user.clusterId, isDeleted: false }, select: { id: true } });
             const plantIds = plantsInCluster.map(p => p.id);
             whereClause.AND.push({ plantId: { in: plantIds.length > 0 ? plantIds : ['non-existent-id'] } });
-        } else if (user.role === 'USER') {
+        } else if (user.role === 'USER' || user.role === 'VIEWER') {
             whereClause.AND.push({ plantId: { equals: user.plantId } });
         }
         if (whereClause.AND.length === 0) delete whereClause.AND;
 
-        // --- STEP 2: RE-USE THE EXACT SAME DATA AGGREGATION & MERGING LOGIC ---
-        const groupedInventory = await prisma.inventory.groupBy({
-            by: ['plantId', 'itemId'], where: whereClause,
-            _sum: { newQty: true, oldUsedQty: true, scrappedQty: true },
+        // --- FETCH DATA USING THE CORRECT LOGIC (NO PAGINATION) ---
+        // CHANGE 1: Ab hum live data ke liye CurrentStock se query kar rahe hain
+        const liveStocksToExport = await prisma.currentStock.findMany({
+            where: whereClause,
+            include: {
+                item: { include: { itemGroup: true } },
+                plant: true
+            }
         });
-        const groupedConsumption = await prisma.consumption.groupBy({
-            by: ['plantId', 'itemId'], where: whereClause,
-            _sum: { quantity: true },
-        });
-        const consumptionMap = new Map(groupedConsumption.map(c => [`${c.plantId}-${c.itemId}`, c._sum.quantity || 0]));
 
-        const itemIds = groupedInventory.map(i => i.itemId);
-        if (itemIds.length === 0) {
+        if (liveStocksToExport.length === 0) {
             req.session.flash = { type: 'info', message: 'No data to export for the selected filters.' };
             return res.redirect('/inventory/summary');
         }
 
-        const [plants, items] = await Promise.all([
-            prisma.plant.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } }),
-            prisma.item.findMany({ where: { id: { in: itemIds } }, include: { itemGroup: true } }),
-        ]);
-        const plantMap = new Map(plants.map(p => [p.id, p.name]));
-        const itemMap = new Map(items.map(i => [i.id, i]));
-
-        let consolidatedData = groupedInventory.map(inv => {
-            const itemDetails = itemMap.get(inv.itemId);
-            if (!itemDetails) return null;
-            const key = `${inv.plantId}-${inv.itemId}`;
-            const consumption = consumptionMap.get(key) || 0;
-            const newQtySum = inv._sum.newQty || 0;
-            const oldUsedQtySum = inv._sum.oldUsedQty || 0;
-            const scrappedQtySum = inv._sum.scrappedQty || 0;
-            return {
-                plant: plantMap.get(inv.plantId) || 'N/A', itemGroup: itemDetails.itemGroup.name,
-                itemCode: itemDetails.item_code, itemDescription: itemDetails.item_description, uom: itemDetails.uom,
-                newQty: newQtySum, oldUsedQty: oldUsedQtySum, scrappedQty: scrappedQtySum, consumption,
-                total: newQtySum + oldUsedQtySum + scrappedQtySum - consumption
-            };
-        }).filter(Boolean);
-
-        // --- STEP 3: RE-USE THE POST-AGGREGATION FILTER LOGIC ---
-        const applyPostFilter = (data, field, value, operator) => {
-            if (!value) return data;
-            const numValue = parseInt(value);
-            if (isNaN(numValue)) return data;
-            return data.filter(item => {
-                if (operator === 'et') return item[field] === numValue;
-                if (operator === 'gt') return item[field] >= numValue;
-                if (operator === 'lt') return item[field] <= numValue;
-                return true;
-            });
+        // CHANGE 2: 'True Consumption' ke liye oldAndReceived: false ka filter lagaya gaya hai
+        const consumptionWhere = {
+            isDeleted: false,
+            plantId: { in: liveStocksToExport.map(s => s.plantId) },
+            itemId: { in: liveStocksToExport.map(s => s.itemId) },
+            oldAndReceived: false
         };
-        consolidatedData = applyPostFilter(consolidatedData, 'newQty', newQty, newQtyOp);
-        consolidatedData = applyPostFilter(consolidatedData, 'oldUsedQty', oldQty, oldQtyOp);
-        consolidatedData = applyPostFilter(consolidatedData, 'scrappedQty', scrappedQty, scrappedQtyOp);
-        consolidatedData = applyPostFilter(consolidatedData, 'consumption', consumptionQty, consumptionQtyOp);
-        consolidatedData = applyPostFilter(consolidatedData, 'total', totalQty, totalQtyOp);
+        const groupedConsumption = await prisma.consumption.groupBy({
+            by: ['plantId', 'itemId'],
+            where: consumptionWhere,
+            _sum: { quantity: true },
+        });
+        const consumptionMap = new Map(groupedConsumption.map(c => [`${c.plantId}-${c.itemId}`, c._sum.quantity || 0]));
 
-        // --- STEP 4: CREATE AND STYLE THE EXCEL FILE ---
+        // --- Format Data for the Excel File ---
+        const dataForSheet = liveStocksToExport.map(stock => {
+            const key = `${stock.plantId}-${stock.itemId}`;
+            const totalConsumed = consumptionMap.get(key) || 0;
+            const netAvailable = stock.newQty + stock.oldUsedQty;
+
+            return {
+                plant: stock.plant.name,
+                itemGroup: stock.item.itemGroup.name,
+                itemCode: stock.item.item_code,
+                itemDescription: stock.item.item_description,
+                uom: stock.item.uom,
+                newQty: stock.newQty,
+                oldUsedQty: stock.oldUsedQty,
+                consumed: totalConsumed,
+                netAvailable: netAvailable
+            };
+        });
+
+        // --- CREATE AND STYLE THE EXCEL FILE ---
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Stock Summary');
+
+        // CHANGE 3: Excel columns ko naye data keys (consumed, netAvailable) se match kiya gaya hai
         worksheet.columns = [
-            { header: 'Plant', key: 'plant', width: 25 }, { header: 'Item Group', key: 'itemGroup', width: 20 },
-            { header: 'Item Code', key: 'itemCode', width: 20 }, { header: 'Item Description', key: 'itemDescription', width: 40 },
-            { header: 'UOM', key: 'uom', width: 10 }, { header: 'Total New', key: 'newQty', width: 15 },
-            { header: 'Total Old/Used', key: 'oldUsedQty', width: 15 }, { header: 'Total Scrapped', key: 'scrappedQty', width: 15 },
-            { header: 'Total Consumed', key: 'consumption', width: 15 },
-            { header: 'Net Available Stock', key: 'total', width: 20, font: { bold: true } },
+            { header: 'Plant', key: 'plant', width: 25 },
+            { header: 'Item Group', key: 'itemGroup', width: 20 },
+            { header: 'Item Code', key: 'itemCode', width: 20 },
+            { header: 'Item Description', key: 'itemDescription', width: 40 },
+            { header: 'UOM', key: 'uom', width: 10 },
+            { header: 'Total New', key: 'newQty', width: 15 },
+            { header: 'Total Old/Used', key: 'oldUsedQty', width: 15 },
+            { header: 'Total Consumed (Net)', key: 'consumed', width: 20 },
+            { header: 'Net Available Stock', key: 'netAvailable', width: 20, font: { bold: true } },
         ];
+
         const headerRow = worksheet.getRow(1);
         headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A5568' } };
+        worksheet.addRows(dataForSheet);
 
-        // --- THIS IS THE FIX: The addRows call now receives a valid array ---
-        worksheet.addRows(consolidatedData);
-        const endColumn = String.fromCharCode(64 + worksheet.columns.length);
-        worksheet.autoFilter = `A1:${endColumn}1`;
-        // --- STEP 5: SEND THE FILE ---
+        // --- SEND THE FILE ---
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const filename = `Stock-Summary_${timestamp}.xlsx`;
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

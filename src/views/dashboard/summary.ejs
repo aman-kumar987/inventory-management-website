@@ -1,0 +1,102 @@
+<div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+
+    <%# Page Header with Back Button %>
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div>
+            <a href="/dashboard" class="text-sm text-indigo-600 hover:underline mb-2 block">
+                &larr; Back to Dashboard
+            </a>
+            <h1 class="text-3xl font-bold text-gray-800"><%= title %></h1>
+        </div>
+    </div>
+
+    <%# New Simple Search Bar %>
+    <div class="mb-6 p-4 bg-white rounded-lg shadow-sm border">
+        <form action="/dashboard/summary" method="GET" class="flex items-center gap-2">
+            <input type="hidden" name="itemGroupId" value="<%= itemGroup.id %>">
+            <input type="hidden" name="dataType" value="<%= dataType %>">
+            
+            <div class="relative flex-grow">
+                 <input type="text" name="search" placeholder="Search by Plant, Item Code, or Description..."
+                       value="<%= filters.search || '' %>" class="form-input w-full">
+            </div>
+            
+            <button type="submit" class="btn-primary flex-shrink-0">Search</button>
+            <a href="/dashboard/summary?itemGroupId=<%= itemGroup.id %>&dataType=<%= dataType %>" class="btn-secondary flex-shrink-0">Clear</a>
+        </form>
+    </div>
+
+    <%# Summary Table Container (waisa hi hai) %>
+    <div class="overflow-x-auto bg-white rounded-lg shadow-sm border">
+        <table class="min-w-full divide-y divide-gray-200">
+            <% if (dataType === 'consumption') { %>
+                <%# CONSUMPTION VIEW TABLE %>
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="table-header">Plant</th>
+                        <th class="table-header">Item</th>
+                        <th class="table-header text-center">UOM</th>
+                        <th class="table-header text-center font-bold">Total Consumed (Net)</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <% if (summaryData.length > 0) { %>
+                        <% summaryData.forEach(item => { %>
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 text-sm text-gray-700"><%= item.plantName %></td>
+                                <td class="px-6 py-4 text-sm">
+                                    <div class="font-semibold text-gray-900"><%= item.itemCode %></div>
+                                    <div class="text-gray-500"><%= item.itemDescription %></div>
+                                </td>
+                                <td class="px-6 py-4 text-center text-sm text-gray-500"><%= item.uom %></td>
+                                <td class="px-6 py-4 text-center text-base font-bold">
+                                    <a href="/consumption/details?itemId=<%= item.itemId %>&plantId=<%= item.plantId %>&itemGroupId=<%= itemGroup.id %>&dataType=<%= dataType %>"
+                                       class="text-indigo-600 hover:text-indigo-900 hover:underline">
+                                        <%= item.consumed %>
+                                    </a>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    <% } else { %>
+                         <tr>
+                            <td colspan="4" class="px-6 py-10 text-center text-gray-500">No data found for your search.</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            <% } else { %>
+                <%# INVENTORY VIEW TABLE %>
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="table-header">Plant</th>
+                        <th class="table-header">Item</th>
+                        <th class="table-header text-center">New Qty</th>
+                        <th class="table-header text-center">Old & Used Qty</th>
+                        <th class="table-header text-center">Consumed (Net)</th>
+                        <th class="table-header text-center font-bold">Net Available</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                     <% if (summaryData.length > 0) { %>
+                        <% summaryData.forEach(item => { %>
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 text-sm text-gray-700"><%= item.plantName %></td>
+                                <td class="px-6 py-4 text-sm">
+                                    <div class="font-semibold text-gray-900"><%= item.itemCode %></div>
+                                    <div class="text-gray-500"><%= item.itemDescription %></div>
+                                </td>
+                                <td class="px-6 py-4 text-center text-sm text-green-600 font-semibold"><%= item.newQty %></td>
+                                <td class="px-6 py-4 text-center text-sm text-blue-600 font-semibold"><%= item.oldUsedQty %></td>
+                                <td class="px-6 py-4 text-center text-sm text-red-600 font-semibold"><%= item.consumed %></td>
+                                <td class="px-6 py-4 text-center text-base font-bold text-gray-900"><%= item.netAvailable %></td>
+                            </tr>
+                        <% }) %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="6" class="px-6 py-10 text-center text-gray-500">No data found for your search.</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            <% } %>
+        </table>
+    </div>
+</div>

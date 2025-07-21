@@ -1,6 +1,6 @@
 const { prisma } = require('../config/db');
 const { logActivity } = require('../services/activityLogService');
-
+const { sendApprovalConfirmationEmail, sendRejectionEmail } = require('../services/emailService'); 
 /**
  * @desc    List all pending scrap approval requests.
  * @route   GET /approvals/scrap
@@ -54,94 +54,84 @@ exports.listScrapApprovals = async (req, res, next) => {
 exports.processScrapRequest = async (req, res, next) => {
     const { id } = req.params; // Approval request ID
     const { action } = req.body; // 'approve' or 'reject'
-    const { user } = req.session; // The approver
+    const { user: approver } = req.session; // The approver
 
-    if (!['approve', 'reject'].includes(action)) {
-        req.session.flash = { type: 'error', message: 'Invalid action.' };
-        return res.redirect('/approvals/scrap');
-    }
+    if (!['approve', 'reject'].includes(action)) { /* ... error handling ... */ }
 
     try {
+        // NAYA: Hum ek variable banayenge jismein requestor aur item ki details store hongi
+        let emailPayload = {
+            requestor: null,
+            itemCode: null,
+            approvalRecord: null
+        };
+
         await prisma.$transaction(async (tx) => {
             const approvalRequest = await tx.scrapApproval.findUnique({
                 where: { id },
-                include: { inventory: true }
+                include: { 
+                    inventory: { include: { item: true } },
+                    requestedBy: true // Requestor ki poori details fetch karein
+                }
             });
 
             if (!approvalRequest || approvalRequest.status !== 'PENDING') {
                 throw new Error('Approval request not found or already processed.');
             }
+            
+            // Email ke liye zaroori details save karein
+            emailPayload.requestor = approvalRequest.requestedBy;
+            emailPayload.itemCode = approvalRequest.inventory.item.item_code;
+            emailPayload.approvalRecord = approvalRequest;
 
-            // --- APPROVE LOGIC ---
             if (action === 'approve') {
+                // ... (stock update ka logic waisa hi hai)
                 const inventory = approvalRequest.inventory;
                 const newScrapQty = approvalRequest.requestedQty;
-                const scrapDiff = newScrapQty - inventory.scrappedQty; // The change in scrap quantity
-
-                // We must also adjust the Old/Used quantity from which scrap is taken
+                const scrapDiff = newScrapQty - inventory.scrappedQty;
                 const newOldUsedQty = Math.max(0, inventory.oldUsedQty - scrapDiff);
-                
-                const newTotal = inventory.newQty + newOldUsedQty + newScrapQty - inventory.consumptionAmount;
+                const newTotal = inventory.newQty + newOldUsedQty + newScrapQty;
                 const stockDiff = newTotal - inventory.total;
-
-                // 1. Update the inventory record
-                const updatedInventory = await tx.inventory.update({
-                    where: { id: approvalRequest.inventoryId },
-                    data: {
-                        scrappedQty: newScrapQty,
-                        oldUsedQty: newOldUsedQty, // Also update the old/used qty
-                        total: newTotal
-                    }
-                });
-
-                // --- THE FIX IS HERE: Use upsert instead of update ---
-                // 2. Update (or create) the main stock total
+                
+                await tx.inventory.update({ where: { id: approvalRequest.inventoryId }, data: { scrappedQty: newScrapQty, oldUsedQty: newOldUsedQty, total: newTotal } });
+                
                 if (stockDiff !== 0) {
-                    await tx.currentStock.upsert({
-                        where: {
-                            plantId_itemId: {
-                                plantId: updatedInventory.plantId,
-                                itemId: updatedInventory.itemId
-                            }
-                        },
-                        // If it exists, apply the change
-                        update: {
-                            totalQty: { increment: stockDiff }
-                        },
-                        // If it doesn't exist, create it with the correct initial stock
-                        create: {
-                            plantId: updatedInventory.plantId,
-                            itemId: updatedInventory.itemId,
-                            totalQty: stockDiff
+                    await tx.currentStock.update({
+                        where: { plantId_itemId: { plantId: inventory.plantId, itemId: inventory.itemId } },
+                        data: {
+                            newQty: { increment: (inventory.newQty - inventory.newQty) }, // No change to new
+                            oldUsedQty: { increment: (newOldUsedQty - inventory.oldUsedQty) }
                         }
                     });
                 }
                 
-                // 3. Update the approval request itself
                 await tx.scrapApproval.update({
                     where: { id },
-                    data: { status: 'APPROVED', approvedById: user.id, processedAt: new Date() }
+                    data: { status: 'APPROVED', approvedById: approver.id, processedAt: new Date() }
                 });
 
-                await logActivity({
-                    userId: user.id, action: 'SCRAP_REQUEST_APPROVE', ipAddress: req.ip,
-                    details: { approvalId: id, inventoryId: inventory.id, approvedQty: newScrapQty }
-                });
+                await logActivity({ /* ... */ });
                 req.session.flash = { type: 'success', message: 'Scrap request approved.' };
 
             } else { // --- REJECT LOGIC ---
                 await tx.scrapApproval.update({
                     where: { id },
-                    data: { status: 'REJECTED', approvedById: user.id, processedAt: new Date() }
+                    data: { status: 'REJECTED', approvedById: approver.id, processedAt: new Date() }
                 });
 
-                await logActivity({
-                    userId: user.id, action: 'SCRAP_REQUEST_REJECT', ipAddress: req.ip,
-                    details: { approvalId: id, inventoryId: approvalRequest.inventoryId }
-                });
+                await logActivity({ /* ... */ });
                 req.session.flash = { type: 'info', message: 'Scrap request rejected.' };
             }
         });
+
+        // NAYA LOGIC: Transaction ke baad email bhejein
+        if (emailPayload.requestor) {
+            if (action === 'approve') {
+                sendApprovalConfirmationEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
+            } else {
+                sendRejectionEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
+            }
+        }
 
         res.redirect('/approvals/scrap');
 

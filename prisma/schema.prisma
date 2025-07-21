@@ -14,6 +14,7 @@ model session {
   sid    String   @id
   sess   Json
   expire DateTime
+
   @@ignore
 }
 
@@ -43,57 +44,62 @@ enum ApprovalStatus {
 // CORE MODELS
 // -------------------
 model User {
-  id                String          @id @default(uuid())
-  name              String
-  email             String          @unique
-  password          String
-  role              Role
-  status            UserStatus      @default(ACTIVE)
-  isDeleted         Boolean         @default(false)
-  plantId           String
-  clusterId         String?
-  lastLoginAt       DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  createdBy         String?
-  updatedBy         String?
-  plant             Plant           @relation(fields: [plantId], references: [id])
-  cluster           Cluster?        @relation(fields: [clusterId], references: [id])
-  changeHistory     ChangeHistory[]
-  activityLogs      ActivityLog[]
-  scrapApprovalsReq ScrapApproval[]   @relation("Requestor")
-  scrapApprovalsApp ScrapApproval[]   @relation("Approver")
-  passwordResetTokens PasswordResetToken[]
+  id                           String                     @id @default(uuid())
+  name                         String
+  email                        String                     @unique
+  password                     String
+  role                         Role
+  status                       UserStatus                 @default(ACTIVE)
+  isDeleted                    Boolean                    @default(false)
+  plantId                      String
+  clusterId                    String?
+  lastLoginAt                  DateTime?
+  createdAt                    DateTime                   @default(now())
+  updatedAt                    DateTime                   @updatedAt
+  createdBy                    String?
+  updatedBy                    String?
+  plant                        Plant                      @relation(fields: [plantId], references: [id])
+  cluster                      Cluster?                   @relation(fields: [clusterId], references: [id])
+  changeHistory                ChangeHistory[]
+  activityLogs                 ActivityLog[]
+  scrapApprovalsReq            ScrapApproval[]            @relation("Requestor")
+  scrapApprovalsApp            ScrapApproval[]            @relation("Approver")
+  passwordResetTokens          PasswordResetToken[]
+  consumptionScrapApprovalsReq ConsumptionScrapApproval[] @relation("ConsumptionRequestor")
+  consumptionScrapApprovalsApp ConsumptionScrapApproval[] @relation("ConsumptionApprover")
+
   @@index([isDeleted, status])
 }
 
 model Cluster {
-  id        String    @id @default(uuid())
-  name      String    @unique
-  isDeleted Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id        String   @id @default(uuid())
+  name      String   @unique
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   createdBy String?
   updatedBy String?
   plants    Plant[]
   users     User[]
+
   @@index([isDeleted])
 }
 
 model Plant {
-  id           String         @id @default(uuid())
-  name         String         @unique
-  clusterId    String
-  isDeleted    Boolean        @default(false)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  createdBy    String?
-  updatedBy    String?
-  cluster      Cluster        @relation(fields: [clusterId], references: [id])
-  users        User[]
-  inventories  Inventory[]
-  consumptions Consumption[]
+  id            String         @id @default(uuid())
+  name          String         @unique
+  clusterId     String
+  isDeleted     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  createdBy     String?
+  updatedBy     String?
+  cluster       Cluster        @relation(fields: [clusterId], references: [id])
+  users         User[]
+  inventories   Inventory[]
+  consumptions  Consumption[]
   currentStocks CurrentStock[]
+
   @@index([isDeleted])
 }
 
@@ -106,6 +112,7 @@ model ItemGroup {
   createdBy String?
   updatedBy String?
   items     Item[]
+
   @@index([isDeleted])
 }
 
@@ -124,42 +131,46 @@ model Item {
   inventories      Inventory[]
   consumptions     Consumption[]
   currentStocks    CurrentStock[]
-  oldConsumptions  Consumption[] @relation("OldItem")
+  oldConsumptions  Consumption[]  @relation("OldItem")
+
   @@index([isDeleted, item_code])
 }
 
 model Inventory {
-  id                String    @id @default(uuid())
+  id                String          @id @default(uuid())
   reservationNumber String
   date              DateTime
   plantId           String
   itemId            String
-  newQty            Int       @default(0)
-  oldUsedQty        Int       @default(0)
-  scrappedQty       Int       @default(0)
-  consumptionAmount Int       @default(0)
-  total             Int       @default(0)
-  remarks           String?   
+  newQty            Int             @default(0)
+  oldUsedQty        Int             @default(0)
+  scrappedQty       Int             @default(0)
+  consumptionAmount Int             @default(0)
+  total             Int             @default(0)
+  remarks           String?
   scrapApprovals    ScrapApproval[]
-  isDeleted         Boolean   @default(false)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  isDeleted         Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
   createdBy         String?
   updatedBy         String?
-  plant             Plant     @relation(fields: [plantId], references: [id])
-  item              Item      @relation(fields: [itemId], references: [id])
+  plant             Plant           @relation(fields: [plantId], references: [id])
+  item              Item            @relation(fields: [itemId], references: [id])
+
   @@index([reservationNumber])
 }
 
 model CurrentStock {
-  id        String   @id @default(uuid())
-  plantId   String
-  itemId    String
-  totalQty  Int
-  updatedAt DateTime @updatedAt
-  plant     Plant    @relation(fields: [plantId], references: [id])
-  item      Item     @relation(fields: [itemId], references: [id])
-  isDeleted    Boolean  @default(false)
+  id         String   @id @default(uuid())
+  plantId    String
+  itemId     String
+  newQty     Int      @default(0)
+  oldUsedQty Int      @default(0)
+  updatedAt  DateTime @updatedAt
+  plant      Plant    @relation(fields: [plantId], references: [id])
+  item       Item     @relation(fields: [itemId], references: [id])
+  isDeleted  Boolean  @default(false)
+
   @@unique([plantId, itemId])
 }
 
@@ -167,9 +178,9 @@ model Consumption {
   id                   String   @id @default(uuid())
   date                 DateTime
   plantId              String
-  itemId               String   // This will store the ID of the NEW item installed
+  itemId               String // This will store the ID of the NEW item installed
   consumption_location String
-  sub_location         String
+  sub_location         String?
   quantity             Int
   isReturnable         Boolean  @default(false)
   remarks              String
@@ -180,24 +191,25 @@ model Consumption {
   updatedBy            String?
 
   // --- NEW INSTALLATION FIELDS ---
-  newInstallation      Boolean  @default(false) // Field was missing
-  new_itemCode         String?                  // This can be the same as itemId
-  new_assetNo          String?
-  new_serialNo         String?
-  new_poNo             String?
+  newInstallation Boolean @default(false) // Field was missing
+  new_itemCode    String? // This can be the same as itemId
+  new_assetNo     String?
+  new_serialNo    String?
+  new_poNo        String?
 
   // --- OLD RECEIVED FIELDS ---
-  oldAndReceived       Boolean  @default(false) // Field was missing
-  old_itemCode         String?                  // This is the FK to the old item
-  old_assetNo          String?
-  old_serialNo         String?
-  old_poNo             String?
-  old_faultRemark      String?
+  oldAndReceived  Boolean @default(false) // Field was missing
+  old_itemCode    String? // This is the FK to the old item
+  old_assetNo     String?
+  old_serialNo    String?
+  old_poNo        String?
+  old_faultRemark String?
 
   // --- RELATIONS ---
-  plant                Plant    @relation(fields: [plantId], references: [id])
-  item                 Item     @relation(fields: [itemId], references: [id])
-  oldItem              Item?    @relation("OldItem", fields: [old_itemCode], references: [id])
+  plant                     Plant                      @relation(fields: [plantId], references: [id])
+  item                      Item                       @relation(fields: [itemId], references: [id])
+  oldItem                   Item?                      @relation("OldItem", fields: [old_itemCode], references: [id])
+  consumptionScrapApprovals ConsumptionScrapApproval[]
 }
 
 model ScrapApproval {
@@ -214,6 +226,7 @@ model ScrapApproval {
   inventory     Inventory      @relation(fields: [inventoryId], references: [id])
   requestedBy   User           @relation("Requestor", fields: [requestedById], references: [id])
   approvedBy    User?          @relation("Approver", fields: [approvedById], references: [id])
+
   @@index([status])
 }
 
@@ -227,6 +240,7 @@ model ChangeHistory {
   changedById String
   changedAt   DateTime @default(now())
   changedBy   User     @relation(fields: [changedById], references: [id])
+
   @@index([modelName, recordId])
 }
 
@@ -238,6 +252,7 @@ model ActivityLog {
   details   Json?
   createdAt DateTime @default(now())
   user      User?    @relation(fields: [userId], references: [id])
+
   @@index([action])
 }
 
@@ -250,4 +265,23 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model ConsumptionScrapApproval {
+  id            String         @id @default(uuid())
+  consumptionId String
+  requestedQty  Int
+  status        ApprovalStatus @default(PENDING)
+  remarks       String?
+  requestedById String
+  approvedById  String?
+  processedAt   DateTime?
+  isDeleted     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+
+  consumption Consumption @relation(fields: [consumptionId], references: [id])
+  requestedBy User        @relation("ConsumptionRequestor", fields: [requestedById], references: [id])
+  approvedBy  User?       @relation("ConsumptionApprover", fields: [approvedById], references: [id])
+
+  @@index([status])
 }

@@ -233,3 +233,58 @@ E:\ShreeCementInternship\shree-inventory\src\views\consumption\add.ejs:2 1| <for
 
 |         |       |            |      |           |     |          STOCK              |       |    
 | SR. NO. | PLANT | ITEM GROUP | ITEM | ITEM_NAME | UOM | NEW | OLD & USED | SCRAPPED | TOTAL |
+
+
+
+
+
+
+
+------------------------------------------------------------------------------------------
+senario
+there are north, south, east, west cluster
+each cluster has multiple plants ( each plant is related to a cluster )
+
+when user add new inventory data
+wo ek reservation number daalta hai or ek date select krta hai
+
+ab wo inventory ka form fill krta hai
+jismein wo plants select krta hai (only if user is a cluster manager or a super admin ) agar wo user hai to usse related plants already selected hoga jisse wo related hai.
+fir wo item select krta hai jo item master mein available hain
+fir remark fill krega form mein
+
+or niche quantity add krta hai
+jismein uske paas option hai category or quantity related hai
+eg. for new category quantitiy = 10 etc.
+and for old & used category quantitiy = 5,
+and for scrapped category quantity = 3.
+
+ek reservation number or date ke againse multiple inventory form add kr skte hain.
+
+
+ye data db mein store hota hai
+
+ab consumption ka scenerio
+
+jab user consumption add kre tab following senario ho skte hain.
+
+Senario - 1: jab user kisi old item ko kisi new item se replace kre tab
+wo date select krta hai
+wo plant select krta hai, consumption location fill krta hai or sub location fill krta hai or quantity fill krta hai
+ab kyonki wo ek old item ko replace kr raha hai to wo old item received ko yes krta hai aur uske saamne old item ke detail fill krne ke fields visible ho jate hain
+which are item code (ye optional nahi hai), asset no., serial no., po no., and fault remark (ye optional nahi hai) ismein ek field add krna hai jiske options honge old & used and scrapped.
+taki pata chale ki jo item received hue hai wo inventory mein kis category mein jayenge ismein new ka option nahi hoga. or agar wo scrapped mein add kiya jaye to cluster manager or super admin ke paas approval ke liye jaye keval tab hi changes approve ho.
+
+fir new installation item ke details fill krega
+which are item code, asset no., serial no., po no., fir general remark (mandatory) and a yes no flag like returnable consumption chechbox.
+ismein bhi category ka option add krna jo user ko option de ki konsi category ka item use krna hai ismein 2 options hi honge new and old & used. ( ya to wo naya use krega ya fir ek baar kaam mein le liya gaya hai )
+
+
+Senario 2: jab kahi pe new requirement hai
+tab ek user consumption form kholta hai date select krta hai, plant select krta hai, Consumption location fill krta hai, fir sub location fill krta hai, or quantity fill krta hai or old received ko no hi rehne deta hai fir wo new installation section mein item code select krta hai, asset no., serial no., po no. fill krta hai,
+in last general remarks field fill krta hai or jarurat ke hisab se is returnable ko yes ya no krta hai (checkbox).
+
+
+ye to hogaya consumption and inventory add krne ka baki to user hierarchy tum code dekhke samajh hi gaye ho.
+
+fir ek table dekhni hai jismein current stock dekh paye uska format tu decide krna pr pelhe ye functionality pe kaam krke complete kre kya.
