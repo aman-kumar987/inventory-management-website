@@ -96,8 +96,11 @@ exports.createConsumption = async (req, res, next) => {
     }
 
     try {
+        const logDetails = [];
+
         await prisma.$transaction(async (tx) => {
-            for (const item of lineItems) {
+            for (const [index, item] of lineItems.entries()) {
+                const entryNum = index + 1;
                 const {
                     plantId, location, subLocation, quantity: qtyString, remarks, isReturnable,
                     new_itemCode, new_assetNo, new_serialNo, new_poNo, consumeFromCategory,
@@ -106,11 +109,11 @@ exports.createConsumption = async (req, res, next) => {
                 const quantity = parseInt(qtyString);
                 const stockPlantId = user.role === 'USER' ? user.plantId : plantId;
 
-                // Stock validation and update logic
                 const stockToConsume = await tx.currentStock.findUnique({ where: { plantId_itemId: { plantId: stockPlantId, itemId: new_itemCode } } });
-                if (!stockToConsume) throw new Error(`Stock for new item not found.`);
-                if (consumeFromCategory === 'New' && stockToConsume.newQty < quantity) throw new Error(`Insufficient 'New' stock.`);
-                if (consumeFromCategory === 'OldUsed' && stockToConsume.oldUsedQty < quantity) throw new Error(`Insufficient 'Old & Used' stock.`);
+                if (!stockToConsume) throw new Error(`Entry #${entryNum}: Stock for new item not found.`);
+                if (consumeFromCategory === 'New' && stockToConsume.newQty < quantity) throw new Error(`Entry #${entryNum}: Insufficient 'New' stock.`);
+                if (consumeFromCategory === 'OldUsed' && stockToConsume.oldUsedQty < quantity) throw new Error(`Entry #${entryNum}: Insufficient 'Old & Used' stock.`);
+
                 const stockUpdateData = consumeFromCategory === 'New' ? { newQty: { decrement: quantity } } : { oldUsedQty: { decrement: quantity } };
                 await tx.currentStock.update({ where: { plantId_itemId: { plantId: stockPlantId, itemId: new_itemCode } }, data: stockUpdateData });
 
@@ -123,7 +126,22 @@ exports.createConsumption = async (req, res, next) => {
                             create: { plantId: stockPlantId, itemId: old_itemCode, oldUsedQty: quantity }
                         });
                     } else if (receivedAsCategory === 'Scrapped') {
-                        approvalRequired = true;
+                        if (user.role === 'SUPER_ADMIN' || user.role === 'CLUSTER_MANAGER') {
+                            await tx.inventory.create({
+                                data: {
+                                    reservationNumber: `SCRAP-FROM-CONS-${Date.now()}`,
+                                    date: new Date(),
+                                    plantId: stockPlantId,
+                                    itemId: old_itemCode,
+                                    scrappedQty: quantity,
+                                    total: quantity,
+                                    remarks: `Direct scrap from consumption by ${user.name}. Fault: ${sanitize(old_faultRemark) || ''}`,
+                                    createdBy: user.id,
+                                }
+                            });
+                        } else {
+                            approvalRequired = true;
+                        }
                     }
                 }
 
@@ -152,7 +170,6 @@ exports.createConsumption = async (req, res, next) => {
                     }
                 });
 
-                // THE FIX: This block is now complete and correct
                 if (approvalRequired) {
                     const approval = await tx.consumptionScrapApproval.create({
                         data: {
@@ -163,40 +180,31 @@ exports.createConsumption = async (req, res, next) => {
                             requestedById: user.id
                         }
                     });
-
                     await logActivity({
-                        userId: user.id,
-                        action: 'SCRAP_REQUEST_CREATE',
-                        ipAddress: req.ip,
-                        details: { 
-                            approvalId: approval.id, 
-                            consumptionId: consumptionRecord.id, 
-                            requestedQty: quantity 
-                        }
+                        userId: user.id, action: 'SCRAP_REQUEST_CREATE', ipAddress: req.ip,
+                        details: { approvalId: approval.id, consumptionId: consumptionRecord.id, requestedQty: quantity }
                     });
-
                     if (user.clusterId) {
-                        const approver = await tx.user.findFirst({
-                            where: { clusterId: user.clusterId, role: 'CLUSTER_MANAGER', isDeleted: false }
-                        });
+                        const approver = await tx.user.findFirst({ where: { clusterId: user.clusterId, role: 'CLUSTER_MANAGER', isDeleted: false } });
                         if (approver) {
                             const itemDetails = await tx.item.findUnique({ where: { id: consumptionRecord.itemId } });
                             const plantDetails = await tx.plant.findUnique({ where: { id: consumptionRecord.plantId } });
-                            const emailPayload = {
-                                item: itemDetails,
-                                plant: plantDetails,
-                                reservationNumber: `From Consumption on ${consumptionDate.toLocaleDateString()}`
-                            };
+                            const emailPayload = { item: itemDetails, plant: plantDetails, reservationNumber: `From Consumption on ${consumptionDate.toLocaleDateString()}` };
                             sendScrapRequestEmail(approver, user, emailPayload).catch(console.error);
                         }
                     }
                 }
+                logDetails.push({ consumptionId: consumptionRecord.id, itemId: new_itemCode, quantity });
             }
+        });
+
+        await logActivity({
+            userId: user.id, action: 'CONSUMPTION_CREATE', ipAddress: req.ip,
+            details: { date, itemCount: logDetails.length, items: logDetails }
         });
 
         req.session.flash = { type: 'success', message: 'Consumption recorded successfully.' };
         res.redirect('/consumption');
-
     } catch (error) {
         console.error("Consumption creation failed:", error.message);
         req.session.flash = { type: 'error', message: `Failed to record consumption: ${error.message}` };
@@ -295,7 +303,7 @@ exports.listConsumptions = async (req, res, next) => {
             title: 'Consumption History',
             consumptions, plants, itemGroups,
             currentPage: page, totalPages: Math.ceil(totalRecords / limit), totalItems: totalRecords,
-            searchTerm: search, filters: req.query
+            searchTerm: search, filters: req.query, limit: limit
         });
     } catch (error) {
         next(error);

@@ -1,11 +1,30 @@
 <% if (totalPages > 1) { %>
     <% 
-        // Helper to convert the filters object into a URL query string
         const filterParams = new URLSearchParams(filters || {}).toString();
         const queryString = filterParams ? '&' + filterParams : '';
+        const window = 1; // Current page ke aas-paas kitne number dikhane hain
+        const pagesToRender = [];
+
+        // Hamesha pehla, aakhri, aur current page ke aas-paas ke pages dikhayein
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= currentPage - window && i <= currentPage + window)) {
+                if (!pagesToRender.includes(i)) {
+                    pagesToRender.push(i);
+                }
+            }
+        }
+
+        const finalPages = [];
+        let lastPage = 0;
+        for (const page of pagesToRender) {
+            if (lastPage !== 0 && page > lastPage + 1) {
+                finalPages.push('...'); // Agar pages ke beech gap hai to '...' add karein
+            }
+            finalPages.push(page);
+            lastPage = page;
+        }
     %>
     <div class="mt-6 flex items-center justify-between bg-white px-4 py-3 sm:px-6 rounded-md border-t border-gray-200">
-        <!-- Desktop pagination -->
         <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
             <div>
                  <p class="text-sm text-gray-700">
@@ -21,13 +40,17 @@
             <div>
                 <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
                     <a href="<%= baseUrl %>?page=<%= Math.max(1, currentPage - 1) %><%= queryString %>" class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">«</a>
-                    <% for(let i = 1; i <= totalPages; i++) { %>
-                        <% if(i === currentPage) { %>
-                            <span aria-current="page" class="relative z-10 inline-flex items-center bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"><%= i %></span>
+                    
+                    <% finalPages.forEach(page => { %>
+                        <% if (page === '...') { %>
+                            <span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300">...</span>
+                        <% } else if (page === currentPage) { %>
+                            <span aria-current="page" class="relative z-10 inline-flex items-center bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"><%= page %></span>
                         <% } else { %>
-                            <a href="<%= baseUrl %>?page=<%= i %><%= queryString %>" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"><%= i %></a>
+                            <a href="<%= baseUrl %>?page=<%= page %><%= queryString %>" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"><%= page %></a>
                         <% } %>
-                    <% } %>
+                    <% }) %>
+
                     <a href="<%= baseUrl %>?page=<%= Math.min(totalPages, currentPage + 1) %><%= queryString %>" class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">»</a>
                 </nav>
             </div>

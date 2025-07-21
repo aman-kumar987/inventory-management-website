@@ -191,7 +191,10 @@ exports.processConsumptionScrapRequest = async (req, res, next) => {
     const { action } = req.body;
     const { user: approver } = req.session;
 
-    if (!['approve', 'reject'].includes(action)) { /* ... */ }
+    if (!['approve', 'reject'].includes(action)) {
+        req.session.flash = { type: 'error', message: 'Invalid action.' };
+        return res.redirect('/approvals/scrap');
+    }
 
     try {
         let emailPayload = null;
@@ -209,16 +212,24 @@ exports.processConsumptionScrapRequest = async (req, res, next) => {
                 throw new Error('Approval request not found or already processed.');
             }
 
-            emailPayload = { /* ... (email payload logic waisa hi hai) ... */ };
-            
-            if (action === 'approve') {
-                // Step 1: Approval ka status update karein
-                await tx.consumptionScrapApproval.update({
-                    where: { id },
-                    data: { status: 'APPROVED', approvedById: approver.id, processedAt: new Date() }
-                });
+            emailPayload = {
+                requestor: approvalRequest.requestedBy,
+                itemCode: approvalRequest.consumption.item.item_code,
+                approvalRecord: approvalRequest
+            };
 
-                // Step 2 (THE FIX): Inventory table mein ek historical log banayein
+            const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED';
+            
+            await tx.consumptionScrapApproval.update({
+                where: { id },
+                data: {
+                    status: newStatus,
+                    approvedById: approver.id,
+                    processedAt: new Date()
+                }
+            });
+
+            if (action === 'approve') {
                 await tx.inventory.create({
                     data: {
                         reservationNumber: `SCRAP-FROM-CONS-${approvalRequest.consumption.id.substring(0, 8)}`,
@@ -233,17 +244,8 @@ exports.processConsumptionScrapRequest = async (req, res, next) => {
                         createdBy: approver.id,
                     }
                 });
-                
                 req.session.flash = { type: 'success', message: 'Request has been APPROVED.' };
-
             } else { // action === 'reject'
-                // Step 1: Approval ka status update karein
-                await tx.consumptionScrapApproval.update({
-                    where: { id },
-                    data: { status: 'REJECTED', approvedById: approver.id, processedAt: new Date() }
-                });
-
-                // Step 2 (THE FIX): Item ko 'Old & Used' stock mein wapas daalein
                 await tx.currentStock.upsert({
                     where: {
                         plantId_itemId: {
@@ -260,17 +262,24 @@ exports.processConsumptionScrapRequest = async (req, res, next) => {
                         oldUsedQty: approvalRequest.requestedQty
                     }
                 });
-
                 req.session.flash = { type: 'info', message: 'Request has been REJECTED and item returned to stock.' };
             }
 
-            // Audit log (dono cases ke liye)
-            await logActivity({ /* ... */ });
+            await logActivity({
+                userId: approver.id,
+                action: newStatus === 'APPROVED' ? 'SCRAP_REQUEST_APPROVE' : 'SCRAP_REQUEST_REJECT',
+                ipAddress: req.ip,
+                details: { approvalId: id, consumptionId: approvalRequest.consumptionId, quantity: approvalRequest.requestedQty }
+            });
         });
 
-        // Email logic (dono cases ke liye)
-        if (emailPayload.requestor) { /* ... */ }
-
+        if (emailPayload.requestor) {
+            if (action === 'approve') {
+                sendApprovalConfirmationEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
+            } else {
+                sendRejectionEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
+            }
+        }
         res.redirect('/approvals/scrap');
 
     } catch (error) {
