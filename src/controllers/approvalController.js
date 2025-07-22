@@ -100,7 +100,10 @@ exports.processScrapRequest = async (req, res, next) => {
     const { action } = req.body;
     const { user: approver } = req.session;
 
-    if (!['approve', 'reject'].includes(action)) { /* ... */ }
+    if (!['approve', 'reject'].includes(action)) {
+        req.session.flash = { type: 'error', message: 'Invalid action.' };
+        return res.redirect('/approvals/scrap');
+    }
 
     try {
         let emailPayload = { requestor: null, itemCode: null, approvalRecord: null };
@@ -123,33 +126,21 @@ exports.processScrapRequest = async (req, res, next) => {
 
             if (action === 'approve') {
                 const inventory = approvalRequest.inventory;
-                const newScrapQty = approvalRequest.requestedQty;
-                const scrapDiff = newScrapQty - inventory.scrappedQty;
-                const newOldUsedQty = Math.max(0, inventory.oldUsedQty - scrapDiff);
-                const newTotal = inventory.newQty + newOldUsedQty + newScrapQty;
+                const requestedScrapQty = BigInt(approvalRequest.requestedQty);
 
-                await tx.inventory.update({ 
-                    where: { id: approvalRequest.inventoryId }, 
-                    data: { scrappedQty: newScrapQty, oldUsedQty: newOldUsedQty, total: newTotal } 
+                // THE FIX: Update the inventory log to reflect the approved scrap
+                await tx.inventory.update({
+                    where: { id: approvalRequest.inventoryId },
+                    data: {
+                        scrappedQty: requestedScrapQty,
+                        // Recalculate the total for the log entry
+                        total: BigInt(inventory.newQty) + BigInt(inventory.oldUsedQty) + requestedScrapQty
+                    }
                 });
-                
-                // FIX: 'update' ko 'upsert' se replace kiya gaya hai
-                const oldUsedQtyDiff = newOldUsedQty - inventory.oldUsedQty;
-                if (oldUsedQtyDiff !== 0) {
-                     await tx.currentStock.upsert({
-                        where: { plantId_itemId: { plantId: inventory.plantId, itemId: inventory.itemId } },
-                        update: {
-                            oldUsedQty: { increment: oldUsedQtyDiff }
-                        },
-                        create: {
-                            plantId: inventory.plantId,
-                            itemId: inventory.itemId,
-                            newQty: 0,
-                            oldUsedQty: oldUsedQtyDiff
-                        }
-                    });
-                }
-                
+
+                // NOTE: We DO NOT change CurrentStock here. The usable stock (new + old)
+                // was already correct. This approval simply confirms the scrap portion of the delivery.
+
                 await tx.scrapApproval.update({
                     where: { id },
                     data: { status: 'APPROVED', approvedById: approver.id, processedAt: new Date() }
@@ -157,18 +148,26 @@ exports.processScrapRequest = async (req, res, next) => {
 
                 await logActivity({
                     userId: approver.id, action: 'SCRAP_REQUEST_APPROVE', ipAddress: req.ip,
-                    details: { approvalId: id, inventoryId: inventory.id, approvedQty: newScrapQty }
+                    details: { approvalId: id, inventoryId: inventory.id, approvedQty: Number(requestedScrapQty) }
                 });
                 req.session.flash = { type: 'success', message: 'Scrap request approved.' };
 
-            } else { // Reject logic waisa hi hai
-                await tx.scrapApproval.update({ /* ... */ });
-                await logActivity({ /* ... */ });
+            } else { // Reject logic
+                await tx.scrapApproval.update({
+                    where: { id },
+                    data: { status: 'REJECTED', approvedById: approver.id, processedAt: new Date() }
+                });
+
+                await logActivity({
+                    userId: approver.id,
+                    action: 'SCRAP_REQUEST_REJECT',
+                    ipAddress: req.ip,
+                    details: { approvalId: id, inventoryId: approvalRequest.inventoryId }
+                });
                 req.session.flash = { type: 'info', message: 'Scrap request rejected.' };
             }
         });
 
-        // Email logic waisa hi hai
         if (emailPayload.requestor) {
             if (action === 'approve') {
                 sendApprovalConfirmationEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
@@ -176,7 +175,6 @@ exports.processScrapRequest = async (req, res, next) => {
                 sendRejectionEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
             }
         }
-
         res.redirect('/approvals/scrap');
 
     } catch(error) {

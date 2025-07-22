@@ -1,42 +1,33 @@
-<div class="max-w-2xl mx-auto">
+<div class="max-w-2xl mx-auto py-8">
     <form action="/inventory/<%= inventory.id %>/edit" method="POST" id="edit-inventory-form">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <!-- Pass the returnUrl through the form submission -->
         <input type="hidden" name="returnUrl" value="<%= returnUrl %>">
         
+        <%# Original values ko store karne ke liye hidden inputs %>
         <input type="hidden" id="original-scrapped-qty" value="<%= inventory.scrappedQty %>">
         <input type="hidden" id="original-old-used-qty" value="<%= inventory.oldUsedQty %>">
-        <input type="hidden" id="consumption-qty" value="<%= inventory.consumptionAmount %>">
 
         <div class="bg-white p-8 rounded-lg shadow-md">
-            <h1 class="text-2xl font-bold text-gray-800 mb-2">Edit Inventory Record</h1>
-            <p class="text-gray-600 mb-6">Item: <span class="font-semibold"><%= inventory.item.item_code %></span> | Reservation: <span class="font-semibold"><%= inventory.reservationNumber %></span></p>
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Edit Inventory Record</h1>
+                <p class="text-gray-600 mt-1">Item: <span class="font-semibold"><%= inventory.item.item_code %></span> | Reservation: <span class="font-semibold"><%= inventory.reservationNumber %></span></p>
+            </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <label for="newQty" class="form-label">New Quantity</label>
-                    <!-- JAVASCRIPT FIX: Added 'editable-qty' class -->
-                    <input type="number" name="newQty" id="newQty" min="0" value="<%= inventory.newQty %>" required class="form-input editable-qty">
-                </div>
-                <div>
-                    <label for="oldUsedQty" class="form-label">Old / Used Quantity</label>
-                    <!-- JAVASCRIPT FIX: Added 'editable-qty' class -->
-                    <input type="number" name="oldUsedQty" id="oldUsedQty" min="0" value="<%= inventory.oldUsedQty %>" required class="form-input editable-qty">
+                    <input type="number" name="newQty" id="newQty" min="0" value="<%= inventory.newQty %>" required class="form-input">
                 </div>
                 <div>
                     <label for="scrappedQty" class="form-label">Scrapped Quantity</label>
-                    <!-- JAVASCRIPT FIX: Added 'editable-qty' class -->
-                    <input type="number" name="scrappedQty" id="scrappedQty" min="0" value="<%= inventory.scrappedQty %>" required class="form-input editable-qty">
-                    <p class="text-xs text-gray-500 mt-1">Increasing scrap deducts from 'Old/Used'. For Users, this requires approval.</p>
-                </div>
-                <div>
-                    <label class="form-label">Consumption</label>
-                    <input type="number" value="<%= inventory.consumptionAmount %>" disabled class="form-input form-input-disabled">
+                    <input type="number" name="scrappedQty" id="scrappedQty" min="0" value="<%= inventory.scrappedQty %>" required class="form-input">
                 </div>
                 <div class="md:col-span-2">
-                    <label class="form-label">Total (Calculated)</label>
-                    <input type="text" id="total-display" value="<%= inventory.newQty + inventory.oldUsedQty + inventory.scrappedQty - inventory.consumptionAmount %>" disabled class="form-input form-input-disabled text-lg font-bold bg-indigo-50 text-indigo-800">
+                    <label for="oldUsedQty" class="form-label">Old / Used Quantity</label>
+                    <input type="number" name="oldUsedQty" id="oldUsedQty" min="0" value="<%= inventory.oldUsedQty %>" required class="form-input transition-colors">
+                    <p class="text-xs text-gray-500 mt-1">This value will decrease automatically if you increase scrap. For Users, this requires approval.</p>
                 </div>
+
                 <div class="md:col-span-2">
                     <label for="remarks" class="form-label">Remarks / Reason for Change</label>
                     <textarea name="remarks" id="remarks" rows="3" class="form-input" placeholder="Add or update notes..." required><%= inventory.remarks || '' %></textarea>
@@ -44,50 +35,11 @@
             </div>
 
             <div class="mt-8 flex justify-end space-x-4">
-                <!-- UX FIX: Cancel button now points to the correct return URL -->
                 <a href="<%= returnUrl %>" class="btn-secondary">Cancel</a>
-                <button type="submit" class="btn-primary"><%= (user.role === 'USER') ? 'Submit for Approval' : 'Update Record' %></button>
+                <button type="submit" class="btn-primary"><%= (user.role === 'USER') ? 'Submit for Approval' : 'Save Changes' %></button>
             </div>
         </div>
     </form>
 </div>
 
-<!-- The script block is correct and does not need changes -->
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const form = document.getElementById('edit-inventory-form');
-        if (!form) return;
-
-        const newQtyInput = document.getElementById('newQty');
-        const oldUsedQtyInput = document.getElementById('oldUsedQty');
-        const scrappedQtyInput = document.getElementById('scrappedQty');
-        const totalDisplay = document.getElementById('total-display');
-        
-        const consumptionQty = parseInt(document.getElementById('consumption-qty').value) || 0;
-        const originalScrapped = parseInt(document.getElementById('original-scrapped-qty').value) || 0;
-        const originalOldUsed = parseInt(document.getElementById('original-old-used-qty').value) || 0;
-
-        function updateCalculations() {
-            let newQty = parseInt(newQtyInput.value) || 0;
-            let currentScrapped = parseInt(scrappedQtyInput.value) || 0;
-            
-            const scrapIncrease = Math.max(0, currentScrapped - originalScrapped);
-
-            let finalOldUsedQty = (scrapIncrease > 0) 
-                ? originalOldUsed - scrapIncrease 
-                : parseInt(oldUsedQtyInput.value) || 0;
-
-            oldUsedQtyInput.value = Math.max(0, finalOldUsedQty);
-            finalOldUsedQty = parseInt(oldUsedQtyInput.value) || 0;
-
-            const total = newQty + finalOldUsedQty + currentScrapped - consumptionQty;
-            totalDisplay.value = total;
-        }
-
-        form.querySelectorAll('.editable-qty').forEach(input => {
-            input.addEventListener('input', updateCalculations);
-        });
-
-        updateCalculations();
-    });
-</script>
+<script src="/js/inventory-edit-form.js"></script>

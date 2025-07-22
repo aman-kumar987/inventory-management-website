@@ -1,4 +1,5 @@
 require('dotenv').config();
+BigInt.prototype.toJSON = function() { return this.toString(); };
 const express = require('express');
 const path = require('path');
 const session = require('express-session');

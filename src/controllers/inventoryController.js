@@ -10,14 +10,21 @@ const xlsx = require('xlsx');
 const getDropdownData = async (user) => {
     let plantQuery = { isDeleted: false };
 
-    // Plant ki query role ke hisaab se waisi hi rahegi
+    // This part is correct and determines which plants the user can see in the dropdown.
     if (user.role === 'CLUSTER_MANAGER') {
-        plantQuery = { isDeleted: false, clusterId: user.clusterId };
+        plantQuery = {
+            isDeleted: false,
+            clusterId: user.clusterId,
+        };
     } else if (user.role === 'USER') {
-        plantQuery = { id: user.plantId, isDeleted: false };
+        plantQuery = {
+            id: user.plantId,
+            isDeleted: false,
+        };
     }
 
-    // THE FIX: Ab hum sabhi roles ke liye saare master items fetch karenge
+    // THE FIX: The logic for fetching items is now simplified.
+    // It will fetch ALL master items for ALL roles, which is the correct behavior.
     const [plants, items] = await Promise.all([
         prisma.plant.findMany({
             where: plantQuery,
@@ -437,20 +444,22 @@ exports.updateInventory = async (req, res, next) => {
             throw new Error('Inventory record not found.');
         }
 
+        // THE FIX: Convert all form inputs to Numbers (Integers)
         const finalNewQty = parseInt(newQty, 10) || 0;
         const finalOldUsedQty = parseInt(oldUsedQty, 10) || 0;
         const newScrappedQty = parseInt(scrappedQty, 10) || 0;
-        const scrapChange = newScrappedQty - originalInventory.scrappedQty;
 
-        // Case 1: Admin/Manager hai YA User scrap ko badha nahi raha hai.
+        // THE FIX: Convert all BigInts from the database to Numbers before doing math
+        const originalScrappedQty = Number(originalInventory.scrappedQty);
+        const scrapChange = newScrappedQty - originalScrappedQty;
+
         if (user.role !== 'USER' || (user.role === 'USER' && scrapChange <= 0)) {
-
+            
             await prisma.$transaction(async (tx) => {
-                // FIX: Ab hum alag-alag quantity ka difference nikalenge
-                const newQtyDiff = finalNewQty - originalInventory.newQty;
-                const oldUsedQtyDiff = finalOldUsedQty - originalInventory.oldUsedQty;
+                // THE FIX: Convert original BigInts to Numbers for calculation
+                const newQtyDiff = finalNewQty - Number(originalInventory.newQty);
+                const oldUsedQtyDiff = finalOldUsedQty - Number(originalInventory.oldUsedQty);
 
-                // Inventory log ko update karein
                 await tx.inventory.update({
                     where: { id },
                     data: {
@@ -463,7 +472,6 @@ exports.updateInventory = async (req, res, next) => {
                     }
                 });
 
-                // FIX: CurrentStock ko naye tareeke se update karein
                 if (newQtyDiff !== 0 || oldUsedQtyDiff !== 0) {
                     await tx.currentStock.update({
                         where: { plantId_itemId: { plantId: originalInventory.plantId, itemId: originalInventory.itemId } },
@@ -486,7 +494,7 @@ exports.updateInventory = async (req, res, next) => {
             return res.redirect(redirectPath);
 
         } else {
-            // Case 2: User scrap badha raha hai -> Approval logic waisa hi hai
+            // Approval logic remains the same
             await prisma.$transaction(async (tx) => {
                 await tx.scrapApproval.create({
                     data: {
@@ -497,8 +505,6 @@ exports.updateInventory = async (req, res, next) => {
                         requestedById: user.id,
                     }
                 });
-
-                // ... (baaki ka approval logic waisa hi hai)
             });
 
             await logActivity({
@@ -513,7 +519,7 @@ exports.updateInventory = async (req, res, next) => {
         }
     } catch (error) {
         console.error('Inventory update failed:', error);
-        req.session.flash = { type: 'error', message: 'Failed to update inventory record.' };
+        req.session.flash = { type: 'error', message: `Failed to update inventory record: ${error.message}` };
         res.redirect(`/inventory/${id}/edit?returnUrl=${encodeURIComponent(redirectPath)}`);
     }
 };
