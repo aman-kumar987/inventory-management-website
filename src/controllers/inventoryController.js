@@ -9,35 +9,28 @@ const xlsx = require('xlsx');
 // --- Re-usable Helper Function ---
 const getDropdownData = async (user) => {
     let plantQuery = { isDeleted: false };
-    let accessiblePlantIds = [];
 
+    // Plant ki query role ke hisaab se waisi hi rahegi
     if (user.role === 'CLUSTER_MANAGER') {
-        const plantsInCluster = await prisma.plant.findMany({ where: { clusterId: user.clusterId, isDeleted: false }, select: { id: true } });
-        accessiblePlantIds = plantsInCluster.map(p => p.id);
-        plantQuery.id = { in: accessiblePlantIds };
+        plantQuery = { isDeleted: false, clusterId: user.clusterId };
     } else if (user.role === 'USER') {
-        accessiblePlantIds = [user.plantId];
-        plantQuery.id = user.plantId;
-    } else { // SUPER_ADMIN
-        const allPlants = await prisma.plant.findMany({ where: { isDeleted: false }, select: { id: true } });
-        accessiblePlantIds = allPlants.map(p => p.id);
+        plantQuery = { id: user.plantId, isDeleted: false };
     }
 
-    const plants = await prisma.plant.findMany({ where: plantQuery, orderBy: { name: 'asc' } });
-    
-    // THE FIX: Fetch only items that have stock in the user's accessible plants
-    const availableStock = await prisma.currentStock.findMany({
-        where: {
-            plantId: { in: accessiblePlantIds },
-            OR: [ { newQty: { gt: 0 } }, { oldUsedQty: { gt: 0 } } ],
-            item: { isDeleted: false }
-        },
-        select: { item: true }
-    });
-    
-    // Get unique items from the stock list
-    const items = [...new Map(availableStock.map(stock => [stock.item.id, stock.item])).values()]
-                   .sort((a, b) => a.item_code.localeCompare(b.item_code));
+    // THE FIX: Ab hum sabhi roles ke liye saare master items fetch karenge
+    const [plants, items] = await Promise.all([
+        prisma.plant.findMany({
+            where: plantQuery,
+            orderBy: { name: 'asc' }
+        }),
+        prisma.item.findMany({
+            where: {
+                isDeleted: false,
+                itemGroup: { isDeleted: false }
+            },
+            orderBy: { item_code: 'asc' }
+        })
+    ]);
 
     return { plants, items };
 };
