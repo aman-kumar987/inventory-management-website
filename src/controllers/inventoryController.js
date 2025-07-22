@@ -9,34 +9,35 @@ const xlsx = require('xlsx');
 // --- Re-usable Helper Function ---
 const getDropdownData = async (user) => {
     let plantQuery = { isDeleted: false };
+    let accessiblePlantIds = [];
 
     if (user.role === 'CLUSTER_MANAGER') {
-        plantQuery = {
-            isDeleted: false,
-            clusterId: user.clusterId,
-            cluster: { isDeleted: false }
-        };
+        const plantsInCluster = await prisma.plant.findMany({ where: { clusterId: user.clusterId, isDeleted: false }, select: { id: true } });
+        accessiblePlantIds = plantsInCluster.map(p => p.id);
+        plantQuery.id = { in: accessiblePlantIds };
     } else if (user.role === 'USER') {
-        plantQuery = {
-            id: user.plantId,
-            isDeleted: false,
-            cluster: { isDeleted: false }
-        };
+        accessiblePlantIds = [user.plantId];
+        plantQuery.id = user.plantId;
+    } else { // SUPER_ADMIN
+        const allPlants = await prisma.plant.findMany({ where: { isDeleted: false }, select: { id: true } });
+        accessiblePlantIds = allPlants.map(p => p.id);
     }
 
-    const [plants, items] = await Promise.all([
-        prisma.plant.findMany({
-            where: plantQuery,
-            orderBy: { name: 'asc' }
-        }),
-        prisma.item.findMany({
-            where: {
-                isDeleted: false,
-                itemGroup: { isDeleted: false }
-            },
-            orderBy: { item_code: 'asc' }
-        })
-    ]);
+    const plants = await prisma.plant.findMany({ where: plantQuery, orderBy: { name: 'asc' } });
+    
+    // THE FIX: Fetch only items that have stock in the user's accessible plants
+    const availableStock = await prisma.currentStock.findMany({
+        where: {
+            plantId: { in: accessiblePlantIds },
+            OR: [ { newQty: { gt: 0 } }, { oldUsedQty: { gt: 0 } } ],
+            item: { isDeleted: false }
+        },
+        select: { item: true }
+    });
+    
+    // Get unique items from the stock list
+    const items = [...new Map(availableStock.map(stock => [stock.item.id, stock.item])).values()]
+                   .sort((a, b) => a.item_code.localeCompare(b.item_code));
 
     return { plants, items };
 };
@@ -305,78 +306,96 @@ exports.showSummaryView = async (req, res, next) => {
         const { user } = req.session;
         const page = parseInt(req.query.page) || 1;
         const limit = 15;
-        const skip = (page - 1) * limit;
-        const { search = '' } = req.query;
+        
+        const { 
+            search = '', plantFilter, itemGroupFilter, 
+            newQty, newQtyOp = 'gt', 
+            oldQty, oldQtyOp = 'gt',
+            consumedQty, consumedQtyOp = 'gt',
+            netAvailableQty, netAvailableQtyOp = 'gt'
+        } = req.query;
 
-        // Base filter logic (no changes here)
-        const whereClause = { isDeleted: false };
+        // Step 1: Build database-level filters
+        const whereClause = { isDeleted: false, AND: [] };
         if (search) {
-            whereClause.OR = [
-                { plant: { name: { contains: search, mode: 'insensitive' } } },
-                { item: { OR: [
-                    { item_code: { contains: search, mode: 'insensitive' } },
-                    { item_description: { contains: search, mode: 'insensitive' } },
-                    { itemGroup: { name: { contains: search, mode: 'insensitive' } } }
-                ]}}
-            ];
+            whereClause.AND.push({
+                OR: [
+                    { plant: { name: { contains: search, mode: 'insensitive' } } },
+                    { item: { OR: [ { item_code: { contains: search, mode: 'insensitive' } }, { item_description: { contains: search, mode: 'insensitive' } }, { itemGroup: { name: { contains: search, mode: 'insensitive' } } } ]}}
+                ]
+            });
         }
+        if (plantFilter) whereClause.AND.push({ plantId: plantFilter });
+        if (itemGroupFilter) whereClause.AND.push({ item: { itemGroupId: itemGroupFilter } });
+        if (newQty) whereClause.AND.push({ newQty: { [newQtyOp === 'et' ? 'equals' : newQtyOp === 'gt' ? 'gte' : 'lte']: parseInt(newQty) } });
+        if (oldQty) whereClause.AND.push({ oldUsedQty: { [oldQtyOp === 'et' ? 'equals' : oldQtyOp === 'gt' ? 'gte' : 'lte']: parseInt(oldQty) } });
+        
         if (user.role === 'CLUSTER_MANAGER') {
             const plantsInCluster = await prisma.plant.findMany({ where: { clusterId: user.clusterId, isDeleted: false }, select: { id: true } });
             const plantIds = plantsInCluster.map(p => p.id);
-            whereClause.plantId = { in: plantIds.length > 0 ? plantIds : ['-1'] };
+            whereClause.AND.push({ plantId: { in: plantIds.length > 0 ? plantIds : ['-1'] } });
         } else if (user.role === 'USER' || user.role === 'VIEWER') {
-            whereClause.plantId = { equals: user.plantId };
+            whereClause.AND.push({ plantId: { equals: user.plantId } });
         }
-        
-        // Data fetching logic (no changes here)
-        const [liveStocks, totalRecords] = await Promise.all([
-            prisma.currentStock.findMany({ where: whereClause, include: { item: { include: { itemGroup: true } }, plant: true }, skip, take: limit }),
-            prisma.currentStock.count({ where: whereClause }),
-        ]);
+        if (whereClause.AND.length === 0) delete whereClause.AND;
 
-        const stockIds = liveStocks.map(s => ({ plantId: s.plantId, itemId: s.itemId }));
-        const whereInStock = stockIds.length > 0 ? { OR: stockIds } : { id: '-1' }; // Prevent full table scans
+        // Step 2: Fetch ALL matching data from the database (no pagination yet)
+        const allLiveStocks = await prisma.currentStock.findMany({ 
+            where: whereClause, 
+            include: { item: { include: { itemGroup: true } }, plant: true }
+        });
 
+        // Step 3: Calculate the data for every record
+        const stockIds = allLiveStocks.map(s => ({ plantId: s.plantId, itemId: s.itemId }));
+        const whereInStock = stockIds.length > 0 ? { OR: stockIds } : { id: '-1' };
         const [groupedScrap, consumptionData] = await Promise.all([
-             prisma.inventory.groupBy({
-                by: ['plantId', 'itemId'],
-                where: { isDeleted: false, ...whereInStock },
-                _sum: { scrappedQty: true },
-            }),
-            prisma.consumption.groupBy({
-                by: ['plantId', 'itemId'],
-                where: { isDeleted: false, oldAndReceived: false, ...whereInStock },
-                _sum: { quantity: true },
-            })
+             prisma.inventory.groupBy({ by: ['plantId', 'itemId'], where: { isDeleted: false, ...whereInStock }, _sum: { scrappedQty: true } }),
+             prisma.consumption.groupBy({ by: ['plantId', 'itemId'], where: { isDeleted: false, oldAndReceived: false, ...whereInStock }, _sum: { quantity: true } })
         ]);
-        
         const scrapMap = new Map(groupedScrap.map(s => [`${s.plantId}-${s.itemId}`, s._sum.scrappedQty || 0]));
         const consumptionMap = new Map(consumptionData.map(c => [`${c.plantId}-${c.itemId}`, c._sum.quantity || 0]));
 
-        const consolidatedData = liveStocks.map(stock => {
-            const key = `${stock.plantId}-${stock.itemId}`;
-            return {
-                plant: stock.plant.name, itemGroup: stock.item.itemGroup.name,
-                itemCode: stock.item.item_code, itemDescription: stock.item.item_description,
-                uom: stock.item.uom, newQty: stock.newQty, oldUsedQty: stock.oldUsedQty,
-                scrappedQty: scrapMap.get(key) || 0,
-                consumed: consumptionMap.get(key) || 0,
-                netAvailable: stock.newQty + stock.oldUsedQty
-            };
-        });
+        let consolidatedData = allLiveStocks.map(stock => ({
+            plant: stock.plant.name, itemGroup: stock.item.itemGroup.name,
+            itemCode: stock.item.item_code, itemDescription: stock.item.item_description,
+            uom: stock.item.uom, newQty: stock.newQty, oldUsedQty: stock.oldUsedQty,
+            scrappedQty: scrapMap.get(`${stock.plantId}-${stock.itemId}`) || 0,
+            consumed: consumptionMap.get(`${stock.plantId}-${stock.itemId}`) || 0,
+            netAvailable: stock.newQty + stock.oldUsedQty
+        }));
+
+        // THE FIX: Apply filters for calculated fields on the generated data
+        const applyPostFilter = (data, value, operator, field) => {
+            if (!value) return data;
+            const numValue = parseInt(value);
+            if (isNaN(numValue)) return data;
+            return data.filter(item => {
+                if (operator === 'et') return item[field] === numValue;
+                if (operator === 'gt') return item[field] >= numValue;
+                if (operator === 'lt') return item[field] <= numValue;
+                return true;
+            });
+        };
+        consolidatedData = applyPostFilter(consolidatedData, consumedQty, consumedQtyOp, 'consumed');
+        consolidatedData = applyPostFilter(consolidatedData, netAvailableQty, netAvailableQtyOp, 'netAvailable');
         
-        // THE FIX: Yahan par 'filters' aur baaki zaroori data pass kiya ja raha hai
+        // THE FIX: Paginate the FINAL filtered data
+        const totalItems = consolidatedData.length;
+        const paginatedData = consolidatedData.slice((page - 1) * limit, page * limit);
+        
+        const [plants, itemGroups] = await Promise.all([
+            prisma.plant.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } }),
+            prisma.itemGroup.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } })
+        ]);
+
         res.render('inventory/summary', {
             title: 'Consolidated Stock View',
-            data: consolidatedData,
-            currentPage: page,
-            limit,
-            totalPages: Math.ceil(totalRecords / limit),
-            totalItems: totalRecords,
-            user,
-            filters: req.query // This was the missing piece
+            data: paginatedData,
+            currentPage: page, limit,
+            totalPages: Math.ceil(totalItems / limit),
+            totalItems, user, filters: req.query,
+            plants, itemGroups
         });
-
     } catch (error) {
         next(error);
     }

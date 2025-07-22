@@ -2,24 +2,17 @@ const express = require('express');
 const router = express.Router();
 const itemController = require('../controllers/itemController');
 const { validateItem } = require('../validators/itemValidator');
-const { isAuthenticated, hasRole } = require('../middleware/auth');
-const { ROLES } = require('../utils/constants'); // We'll create this file
+const { hasRole } = require('../middleware/auth');
+const { ROLES } = require('../utils/constants');
 
+// THE FIX: Apply middleware to all routes in this file
+router.use(hasRole([ROLES.SUPER_ADMIN]));
 
-// List items (all roles can view)
 router.get('/', itemController.listItems);
-
-// Routes for Admin & Manager only
-const canManage = hasRole([ROLES.SUPER_ADMIN]); 
-// Create
-router.get('/new', canManage, itemController.renderNewForm);
-router.post('/', canManage, validateItem, itemController.createItem);
-
-// Update
-router.get('/:id/edit', canManage, itemController.renderEditForm);
-router.post('/:id/edit', canManage, validateItem, itemController.updateItem);
-
-// Delete
-router.post('/:id/delete', isAuthenticated, canManage, itemController.softDeleteItem);
+router.get('/new', itemController.renderNewForm);
+router.post('/', validateItem, itemController.createItem);
+router.get('/:id/edit', itemController.renderEditForm);
+router.post('/:id/edit', validateItem, itemController.updateItem);
+router.post('/:id/delete', itemController.softDeleteItem);
 
 module.exports = router;
