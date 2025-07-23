@@ -6,6 +6,12 @@ const transporter = require('../config/mailer');
  * @param {string} resetToken - The non-hashed reset token.
  */
 exports.sendPasswordResetEmail = async (userEmail, resetToken) => {
+    // THE FIX: Safety check to prevent crash if email is not configured
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.log('Email credentials not configured. Skipping password reset email.');
+        return; // Stop the function from running further
+    }
+
     const resetUrl = `${process.env.BASE_URL}/reset-password?token=${resetToken}`;
     
     const mailOptions = {
@@ -32,8 +38,7 @@ exports.sendPasswordResetEmail = async (userEmail, resetToken) => {
         console.log('Password reset email sent to:', userEmail);
     } catch (error) {
         console.error('Error sending password reset email:', error);
-        // We re-throw the error so the controller that called this function can handle it.
-        throw new Error('Could not send password reset email.');
+        // We will just log the error and not re-throw it.
     }
 };
 
@@ -41,6 +46,12 @@ exports.sendPasswordResetEmail = async (userEmail, resetToken) => {
  * @desc    Sends a detailed scrap approval notification to a manager.
  */
 exports.sendScrapRequestEmail = async (approver, requester, details) => {
+    // THE FIX: Safety check to prevent errors if email is not configured
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.log('Email credentials not configured. Skipping scrap request email.');
+        return;
+    }
+
     const approvalUrl = `${process.env.BASE_URL}/approvals/scrap`;
     const mailOptions = {
         from: `"Inventory App" <no-reply@inventory.com>`,
@@ -67,6 +78,7 @@ exports.sendScrapRequestEmail = async (approver, requester, details) => {
     };
     try {
         await transporter.sendMail(mailOptions);
+        console.log(`Scrap approval email sent to manager: ${approver.email}`);
     } catch (error) {
         console.error('Error sending scrap approval email:', error);
     }
@@ -76,6 +88,12 @@ exports.sendScrapRequestEmail = async (approver, requester, details) => {
  * @desc    Sends an email to the requester about their approved request.
  */
 exports.sendApprovalConfirmationEmail = async (requestor, approval, itemCode, approverName) => {
+    // THE FIX: Safety check to prevent errors if email is not configured
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.log('Email credentials not configured. Skipping approval confirmation email.');
+        return;
+    }
+
     const mailOptions = {
         from: `"Inventory App" <no-reply@inventory.com>`,
         to: requestor.email,
@@ -97,6 +115,7 @@ exports.sendApprovalConfirmationEmail = async (requestor, approval, itemCode, ap
     };
     try {
         await transporter.sendMail(mailOptions);
+        console.log(`Approval confirmation email sent to: ${requestor.email}`);
     } catch (error) {
         console.error('Error sending approval confirmation email:', error);
     }
@@ -106,6 +125,12 @@ exports.sendApprovalConfirmationEmail = async (requestor, approval, itemCode, ap
  * @desc    Sends an email to the requester about their rejected request.
  */
 exports.sendRejectionEmail = async (requestor, approval, itemCode, approverName) => {
+    // THE FIX: Safety check to prevent errors if email is not configured
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.log('Email credentials not configured. Skipping rejection email.');
+        return;
+    }
+
     const mailOptions = {
         from: `"Inventory App" <no-reply@inventory.com>`,
         to: requestor.email,
@@ -127,6 +152,7 @@ exports.sendRejectionEmail = async (requestor, approval, itemCode, approverName)
     };
     try {
         await transporter.sendMail(mailOptions);
+        console.log(`Rejection notification email sent to: ${requestor.email}`);
     } catch (error) {
         console.error('Error sending rejection email:', error);
     }
