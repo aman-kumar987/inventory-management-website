@@ -1,5 +1,4 @@
 require('dotenv').config();
-BigInt.prototype.toJSON = function() { return this.toString(); };
 const express = require('express');
 const path = require('path');
 const session = require('express-session');
@@ -7,30 +6,36 @@ const helmet = require('helmet');
 const expressLayouts = require('express-ejs-layouts');
 const rateLimit = require('express-rate-limit');
 const pg = require('pg');
+const cookieParser = require('cookie-parser');
 const connectPgSimple = require('connect-pg-simple')(session);
 const csrf = require('csurf');
 const errorHandler = require('./src/middleware/errorHandler');
-const { isAuthenticated, isApproved } = require('./src/middleware/auth');
+
+// Add this line at the top to handle BigInt conversion to JSON
+BigInt.prototype.toJSON = function() { return this.toString(); };
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Trust the proxy only when in a real production environment
 if (process.env.NODE_ENV === 'production') {
-    app.set('trust proxy', 1); // trust first proxy
+    app.set('trust proxy', 1);
 }
 
-// --- 1. VIEW ENGINE & STATIC FILES ---
+// --- VIEW ENGINE & STATIC FILES ---
 app.use(expressLayouts);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'src/views'));
 app.set('layout', 'layout');
 app.use(express.static(path.join(__dirname, 'src/public')));
 
-// --- 2. BODY PARSERS ---
+// --- BODY PARSERS ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- 3. SECURITY & SESSION ---
+// --- SECURITY & SESSION ---
 app.use(helmet());
+app.use(cookieParser());
 
 const pgPool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
@@ -53,41 +58,29 @@ app.use(
   })
 );
 
-// --- 4. RATE LIMITING ---
+// --- RATE LIMITING ---
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 mins
+  windowMs: 15 * 60 * 1000,
   max: 200,
 });
 app.use(limiter);
 
-// --- 5. CSRF PROTECTION (Apply globally except Excel import) ---
-const csrfProtection = csrf({ cookie: false });
+// --- CSRF PROTECTION ---
+// THE FIX: Using a separate cookie for the CSRF secret is more reliable
+const csrfProtection = csrf({ cookie: true });
+app.use(csrfProtection);
 
-app.use((req, res, next) => {
-  const isImportUpload =
-    req.method === 'POST' && req.path === '/inventory/import';
-
-  if (isImportUpload) return next(); // Skip CSRF for file upload
-
-  csrfProtection(req, res, function (err) {
-    if (err) return next(err);
-    // Safely assign token only if middleware ran
-    if (typeof req.csrfToken === 'function') {
-      res.locals.csrfToken = req.csrfToken();
-    }
-    next();
-  });
-});
-
-// --- 6. GLOBAL LOCALS MIDDLEWARE ---
+// --- GLOBAL LOCALS MIDDLEWARE ---
 app.use((req, res, next) => {
   res.locals.user = req.session.user || null;
+  res.locals.csrfToken = req.csrfToken(); // This now works correctly with the cookie method
   res.locals.flash = req.session.flash;
   delete req.session.flash;
   next();
 });
 
-// --- 7. ROUTE REGISTRATION ---
+// --- ROUTE REGISTRATION ---
+const { isAuthenticated, isApproved } = require('./src/middleware/auth');
 const authRoutes = require('./src/routes/authRoutes');
 const userRoutes = require('./src/routes/userRoutes');
 const clusterRoutes = require('./src/routes/clusterRoutes');
@@ -102,10 +95,10 @@ const logRoutes = require('./src/routes/logRoutes');
 const clusterUserRoutes = require('./src/routes/clusterUserRoutes');
 const dashboardRoutes = require('./src/routes/dashboardRoutes');
 
-// Public routes - in par koi check nahi lagega
+// Public routes
 app.use('/', authRoutes);
 
-// Protected routes - in sab par ab login aur approval, dono check honge
+// Protected routes
 app.use('/users', isAuthenticated, isApproved, userRoutes);
 app.use('/clusters', isAuthenticated, isApproved, clusterRoutes);
 app.use('/plants', isAuthenticated, isApproved, plantRoutes);
@@ -119,27 +112,22 @@ app.use('/admin/logs', isAuthenticated, isApproved, logRoutes);
 app.use('/cluster/users', isAuthenticated, isApproved, clusterUserRoutes);
 app.use('/dashboard', isAuthenticated, isApproved, dashboardRoutes);
 
-// --- 8. CORE APP ROUTES ---
+
+// --- CORE APP ROUTES, 404, AND ERROR HANDLING ---
 app.get('/', (req, res) => {
   res.redirect(req.session.user ? '/dashboard' : '/login');
 });
 
-app.get('/dashboard', (req, res) => {
-  if (!req.session.user) return res.redirect('/login');
-  res.render('dashboard/index', { title: 'Dashboard' });
-});
-
+// 404 handler
 app.use((req, res, next) => {
     res.status(404).render('404', { 
         title: 'Page Not Found' 
     });
 });
 
-
-// --- 9. ERROR HANDLING (MUST BE LAST) ---
 app.use(errorHandler);
 
-// --- 10. START SERVER ---
+// --- START SERVER ---
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
