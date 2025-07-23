@@ -1,6 +1,6 @@
 const { prisma } = require('../config/db');
 const { logActivity } = require('../services/activityLogService');
-const { sendApprovalConfirmationEmail, sendRejectionEmail } = require('../services/emailService'); 
+const { sendApprovalConfirmationEmail, sendRejectionEmail } = require('../services/emailService');
 /**
  * @desc    List all pending scrap approval requests.
  * @route   GET /approvals/scrap
@@ -18,7 +18,7 @@ exports.listScrapApprovals = async (req, res, next) => {
             plantIds = plantsInCluster.map(p => p.id);
             if (plantIds.length === 0) plantIds = ['-1'];
         }
-        
+
         const lowerSearchTerm = searchTerm.toLowerCase();
         let allRequests = [];
 
@@ -50,7 +50,7 @@ exports.listScrapApprovals = async (req, res, next) => {
 
         // 2. Fetch Consumption Scrap Approvals
         if (searchConsumption) {
-             const where = {
+            const where = {
                 status: 'PENDING',
                 consumption: plantIds.length > 0 ? { plantId: { in: plantIds } } : undefined,
             };
@@ -69,10 +69,10 @@ exports.listScrapApprovals = async (req, res, next) => {
             });
             allRequests.push(...consumptionApprovals.map(r => ({ ...r, type: 'Consumption', currentScrapQty: 0 })));
         }
-        
+
         // 3. Sort all requests by date
         allRequests.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-        
+
         // Final filter for 'type' if searched
         const finalRequests = lowerSearchTerm === 'inventory' || lowerSearchTerm === 'consumption'
             ? allRequests.filter(r => r.type.toLowerCase().includes(lowerSearchTerm))
@@ -117,7 +117,7 @@ exports.processScrapRequest = async (req, res, next) => {
             if (!approvalRequest || approvalRequest.status !== 'PENDING') {
                 throw new Error('Approval request not found or already processed.');
             }
-            
+
             emailPayload = {
                 requestor: approvalRequest.requestedBy,
                 itemCode: approvalRequest.inventory.item.item_code,
@@ -170,14 +170,16 @@ exports.processScrapRequest = async (req, res, next) => {
 
         if (emailPayload.requestor) {
             if (action === 'approve') {
-                sendApprovalConfirmationEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
+                // THE FIX: approver.name add kiya gaya
+                sendApprovalConfirmationEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode, approver.name).catch(console.error);
             } else {
-                sendRejectionEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
+                // THE FIX: approver.name add kiya gaya
+                sendRejectionEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode, approver.name).catch(console.error);
             }
         }
         res.redirect('/approvals/scrap');
 
-    } catch(error) {
+    } catch (error) {
         console.error("Failed to process scrap request:", error);
         req.session.flash = { type: 'error', message: `Failed to process request: ${error.message}` };
         res.redirect('/approvals/scrap');
@@ -217,7 +219,7 @@ exports.processConsumptionScrapRequest = async (req, res, next) => {
             };
 
             const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED';
-            
+
             await tx.consumptionScrapApproval.update({
                 where: { id },
                 data: {
@@ -273,9 +275,11 @@ exports.processConsumptionScrapRequest = async (req, res, next) => {
 
         if (emailPayload.requestor) {
             if (action === 'approve') {
-                sendApprovalConfirmationEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
+                // THE FIX: approver.name add kiya gaya
+                sendApprovalConfirmationEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode, approver.name).catch(console.error);
             } else {
-                sendRejectionEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode).catch(console.error);
+                // THE FIX: approver.name add kiya gaya
+                sendRejectionEmail(emailPayload.requestor, emailPayload.approvalRecord, emailPayload.itemCode, approver.name).catch(console.error);
             }
         }
         res.redirect('/approvals/scrap');
@@ -317,7 +321,7 @@ exports.listUserApprovals = async (req, res, next) => {
         ]);
 
         const assignableRoles = ['USER', 'VIEWER', 'CLUSTER_MANAGER'];
-        
+
         res.render('approvals/users', {
             title: 'New User Approvals',
             layout: 'layouts/approvals',
@@ -387,7 +391,7 @@ exports.processUserRequest = async (req, res, next) => {
                 data: dataToUpdate
             });
             req.session.flash = { type: 'success', message: `User ${userToProcess.name} has been approved and activated.` };
-        
+
         } else { // action === 'reject'
             await prisma.user.update({
                 where: { id },
@@ -395,10 +399,10 @@ exports.processUserRequest = async (req, res, next) => {
             });
             req.session.flash = { type: 'info', message: `User registration for ${userToProcess.name} has been rejected.` };
         }
-        
+
         res.redirect('/approvals/users');
 
-    } catch(error) {
+    } catch (error) {
         console.error("Failed to process user request:", error);
         req.session.flash = { type: 'error', message: `Failed to process request: ${error.message}` };
         res.redirect('/approvals/users');

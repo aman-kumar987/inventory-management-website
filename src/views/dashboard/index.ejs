@@ -1,14 +1,13 @@
-<%# CHANGE 1: Naya 'Stock Type' filter add kiya gaya hai %>
-<div class="mb-6 p-4 bg-white rounded-lg shadow-sm border">
-    <form action="/dashboard" method="GET" id="dashboard-filter-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+<div class="px-6 py-4">
+    <form action="/dashboard" method="GET" id="dashboard-filter-form" class="flex gap-2 justify-end align-end">
         <div>
             <label for="plantId" class="form-label">Plant</label>
             <% if (user.role === 'USER' || user.role === 'VIEWER' ) { %>
-                <input type="text" class="form-input" disabled value="<%= accessiblePlants[0]?.name || 'Your Plant' %>">
+                <input type="text" class="form-input bg-white" disabled value="<%= accessiblePlants[0]?.name || 'Your Plant' %>">
                 <input type="hidden" name="plantId" value="<%= accessiblePlants[0]?.id %>">
             <% } else { %>
                 <div class="relative w-full">
-                    <input id="plant-search-input" type="text" class="form-input plant-search-input" placeholder="Search plant..." autocomplete="off" value="<%= accessiblePlants.find(p => p.id === selectedPlantId)?.name || '' %>">
+                    <input id="plant-search-input" type="text" class="form-input plant-search-input bg-white" placeholder="Search plant." autocomplete="off" value="<%= accessiblePlants.find(p => p.id === selectedPlantId)?.name || '' %>">
                     <input type="hidden" id="selected-plant-id" name="plantId" value="<%= selectedPlantId || '' %>">
                     <ul id="plant-search-results" class="absolute z-10 bg-white shadow-lg border mt-1 w-full max-h-60 overflow-y-auto hidden"></ul>
                 </div>
@@ -17,16 +16,16 @@
 
         <div>
             <label for="dataType" class="form-label">Show Stats For</label>
-            <select name="dataType" id="dataType" class="form-input">
+            <select name="dataType" id="dataType" class="p-2 h-3/5 border rounded bg-white">
                 <option value="inventory" <%= dataType === 'inventory' ? 'selected' : '' %>>Inventory</option>
                 <option value="consumption" <%= dataType === 'consumption' ? 'selected' : '' %>>Consumption</option>
-                <%# "Inventory - Consumption" wala option hata diya gaya %>
+                <option value="net" <%= dataType === 'net' ? 'selected' : '' %>>Net</option>
             </select>
         </div>
 
         <div id="stock-type-filter-container">
             <label for="stockType" class="form-label">Stock Type</label>
-            <select name="stockType" id="stockType" class="form-input">
+            <select name="stockType" id="stockType" class="p-2 border rounded h-3/5 bg-white">
                 <option value="all" <%= stockType === 'all' ? 'selected' : '' %>>All Stock</option>
                 <option value="new" <%= stockType === 'new' ? 'selected' : '' %>>New</option>
                 <option value="oldUsed" <%= stockType === 'oldUsed' ? 'selected' : '' %>>Old & Used</option>
@@ -34,8 +33,8 @@
             </select>
         </div>
 
-        <div class="flex">
-            <button type="submit" class="btn-primary w-full">Apply Filters</button>
+        <div class="flex flex-col justify-end">
+            <button type="submit" class="btn-primary cursor-pointer h-3/5">Apply Filters</button>
         </div>
     </form>
 </div>
@@ -45,15 +44,14 @@
         <%= dataTitle %>
     </h2>
     <% if (cardData.length > 0) { %>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div class="flex flex-wrap gap-6">
             <% cardData.forEach(card => { %>
-                <%# CHANGE 2: Card ko clickable banane ke liye <a> tag add kiya gaya %>
-                <a href="/dashboard/summary?itemGroupId=<%= itemGroups.find(g => g.name === card.name)?.id %>&plantId=<%= selectedPlantId %>&dataType=<%= dataType %>&stockType=<%= stockType %>"
-                   class="block bg-white p-6 rounded-lg shadow-lg text-center transform hover:-translate-y-1 transition-transform hover:shadow-xl">
-                    <h3 class="text-lg font-semibold text-gray-500">
+                <a href="/dashboard/summary?itemGroupId=<%= card.id %>&plantId=<%= selectedPlantId %>&dataType=<%= dataType %>&stockType=<%= stockType %>"
+                   class="flex-grow bg-white p-6 rounded-lg shadow-lg text-center transform hover:-translate-y-1 transition-transform hover:shadow-xl min-w-[200px]">
+                    <h3 class="text-lg font-semibold text-gray-500 truncate">
                         <%= card.name %>
                     </h3>
-                    <p class="text-5xl font-bold text-indigo-600 mt-2">
+                    <p class="text-4xl lg:text-5xl font-bold text-indigo-600 mt-2 whitespace-nowrap">
                         <%= card.value %>
                     </p>
                 </a>
@@ -66,10 +64,10 @@
     <% } %>
 </div>
 
-<script id="plant-list-json" type="application/json">
-    <%- JSON.stringify(accessiblePlants) %>
-</script>
-<script src="/js/dashboard.js"></script>
+<!-- ✅ Make sure data is available before JS loads -->
+<script id="plant-list-json" type="application/json"><%- JSON.stringify(accessiblePlants) %></script>
+<script id="chart-data-json" type="application/json"><%- JSON.stringify(cardData) %></script>
 
-<%# CHANGE 3: Naya JavaScript add kiya gaya hai jo Stock Type filter ko hide/show karega %>
-<script src="/js/filter-disabler-dashboard.js"></script>
+<!-- ✅ Scripts loaded after DOM -->
+<script src="/js/dashboard.js" defer></script>
+<script src="/js/filter-disabler-dashboard.js" defer></script>

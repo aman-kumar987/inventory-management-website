@@ -189,8 +189,14 @@ exports.createConsumption = async (req, res, next) => {
                         if (approver) {
                             const itemDetails = await tx.item.findUnique({ where: { id: consumptionRecord.itemId } });
                             const plantDetails = await tx.plant.findUnique({ where: { id: consumptionRecord.plantId } });
-                            const emailPayload = { item: itemDetails, plant: plantDetails, reservationNumber: `From Consumption on ${consumptionDate.toLocaleDateString()}` };
-                            sendScrapRequestEmail(approver, user, emailPayload).catch(console.error);
+                            // THE FIX: Pass the correct object with all details
+                            const emailDetails = {
+                                item: itemDetails,
+                                plant: plantDetails,
+                                requestedQty: quantity,
+                                remarks: sanitize(item.old_faultRemark) || ''
+                            };
+                            sendScrapRequestEmail(approver, user, emailDetails).catch(console.error);
                         }
                     }
                 }
@@ -316,16 +322,10 @@ exports.listConsumptions = async (req, res, next) => {
  */
 exports.renderEditForm = async (req, res, next) => {
     try {
-        // --- THIS IS THE FIX ---
-        // We use Promise.all to fetch both the consumption record and the item list concurrently.
-        const [consumption, items] = await Promise.all([
+        const [consumption, allMasterItems] = await Promise.all([
             prisma.consumption.findUnique({
                 where: { id: req.params.id },
-                include: {
-                    item: true, // The 'new' item
-                    plant: true,
-                    oldItem: true // The 'old' item if it exists
-                }
+                include: { item: true, plant: true, oldItem: true }
             }),
             prisma.item.findMany({ where: { isDeleted: false }, orderBy: { item_code: 'asc' } })
         ]);
@@ -335,17 +335,30 @@ exports.renderEditForm = async (req, res, next) => {
             return res.redirect('/consumption');
         }
 
+        // NAYA: Current available stock fetch karein
+        const currentStock = await prisma.currentStock.findUnique({
+            where: {
+                plantId_itemId: {
+                    plantId: consumption.plantId,
+                    itemId: consumption.itemId,
+                }
+            }
+        });
+
         res.render('consumption/edit', {
             title: 'Edit Consumption',
             consumption,
-            items // <-- Now we pass the list of all items to the view
+            items: allMasterItems,
+            // NAYA: Stock data ko view mein pass karein
+            currentStock: {
+                newQty: Number(currentStock?.newQty || 0n),
+                oldUsedQty: Number(currentStock?.oldUsedQty || 0n)
+            }
         });
     } catch (error) {
         next(error);
     }
 };
-
-
 
 /**
  * @desc    Update an existing consumption record.
@@ -354,57 +367,115 @@ exports.renderEditForm = async (req, res, next) => {
  */
 exports.updateConsumption = async (req, res, next) => {
     const { id } = req.params;
-    const { user: approver } = req.session; // User is the approver in this case
+    const { user: approver } = req.session; // The user editing is the approver
 
     const {
-        quantity, location, sub_location, remarks, isReturnable, date,
-        // ... baaki saare fields
+        quantity,
+        location,
+        sub_location,
+        remarks,
+        isReturnable,
+        date,
+        // These fields are not editable on the form but are included for completeness
+        old_itemCode,
+        new_itemCode,
+        old_assetNo,
+        old_serialNo,
+        old_poNo,
+        old_faultRemark,
+        new_assetNo,
+        new_serialNo,
+        new_poNo
     } = req.body;
 
-    const newQuantity = parseInt(quantity);
+    const newQuantity = parseInt(quantity, 10);
+
     if (isNaN(newQuantity) || newQuantity <= 0) {
         req.session.flash = { type: 'error', message: 'Quantity must be a positive number.' };
         return res.redirect(`/consumption/${id}/edit`);
     }
 
     try {
-        // NAYA: Email bhejne ke liye details store karenge
         let emailPayload = null;
 
         await prisma.$transaction(async (tx) => {
-            const originalConsumption = await tx.consumption.findUnique({ 
+            const originalConsumption = await tx.consumption.findUnique({
                 where: { id },
-                include: { item: true } // Item details bhi fetch karein
+                include: { item: true }
             });
-            if (!originalConsumption) throw new Error("Consumption record not found.");
 
-            // 1. Consumption record ko update karein
-            const updatedConsumption = await tx.consumption.update({
+            if (!originalConsumption) {
+                throw new Error("Consumption record not found.");
+            }
+
+            // Step 1: Calculate the difference in quantity
+            const quantityDiff = newQuantity - Number(originalConsumption.quantity);
+
+            // Step 2: If quantity is changed, validate and update stock
+            if (quantityDiff !== 0) {
+                const stock = await tx.currentStock.findUnique({
+                    where: {
+                        plantId_itemId: {
+                            plantId: originalConsumption.plantId,
+                            itemId: originalConsumption.itemId
+                        }
+                    }
+                });
+
+                const stockUpdateData = {};
+
+                if (quantityDiff > 0) { // --- CASE: Quantity INCREASED ---
+                    const totalAvailableStock = Number(stock?.newQty || 0n) + Number(stock?.oldUsedQty || 0n);
+                    if (totalAvailableStock < quantityDiff) {
+                        throw new Error(`Insufficient stock. Cannot increase quantity by ${quantityDiff}. Only ${totalAvailableStock} more available.`);
+                    }
+                    // Decrease stock (assuming from 'New' for simplicity during edits)
+                    stockUpdateData.newQty = { decrement: quantityDiff };
+
+                } else { // --- CASE: Quantity DECREASED ---
+                    // THE FIX: Add the difference back to the 'Old & Used' category
+                    stockUpdateData.oldUsedQty = { increment: -quantityDiff }; // -quantityDiff makes the number positive
+                }
+
+                await tx.currentStock.update({
+                    where: {
+                        plantId_itemId: {
+                            plantId: originalConsumption.plantId,
+                            itemId: originalConsumption.itemId,
+                        }
+                    },
+                    data: stockUpdateData
+                });
+            }
+
+            // Step 3: Update the consumption record itself
+            await tx.consumption.update({
                 where: { id },
                 data: {
                     quantity: newQuantity,
+                    date: new Date(date),
                     consumption_location: sanitize(location),
-                    sub_location: sanitize(sub_location) || null,
+                    sub_location: sanitize(sub_location),
                     remarks: sanitize(remarks),
-                    // ... baaki saare fields
+                    isReturnable: isReturnable === 'on',
+                    new_assetNo: sanitize(new_assetNo),
+                    new_serialNo: sanitize(new_serialNo),
+                    new_poNo: sanitize(new_poNo),
+                    old_assetNo: sanitize(old_assetNo),
+                    old_serialNo: sanitize(old_serialNo),
+                    old_poNo: sanitize(old_poNo),
+                    old_faultRemark: sanitize(old_faultRemark),
                     updatedBy: approver.id
                 }
             });
 
-            // 2. Related pending scrap approval ko dhoondhein
+            // Step 4: Handle any associated pending scrap approvals
             const pendingApproval = await tx.consumptionScrapApproval.findFirst({
-                where: {
-                    consumptionId: id,
-                    status: 'PENDING'
-                },
-                // NAYA: Requestor ki details bhi fetch karein
-                include: {
-                    requestedBy: true 
-                }
+                where: { consumptionId: id, status: 'PENDING' },
+                include: { requestedBy: true }
             });
 
             if (pendingApproval) {
-                // 3. Approval ko auto-approve karein
                 const approvedRecord = await tx.consumptionScrapApproval.update({
                     where: { id: pendingApproval.id },
                     data: {
@@ -415,7 +486,6 @@ exports.updateConsumption = async (req, res, next) => {
                     }
                 });
 
-                // 4. NAYA LOGIC: Specific approval ka audit log banayein
                 await logActivity({
                     userId: approver.id,
                     action: 'SCRAP_REQUEST_APPROVE',
@@ -423,7 +493,6 @@ exports.updateConsumption = async (req, res, next) => {
                     details: { approvalId: approvedRecord.id, consumptionId: id, approvedQty: newQuantity }
                 });
                 
-                // Email ke liye payload taiyaar karein
                 emailPayload = {
                     requestor: pendingApproval.requestedBy,
                     approvalRecord: approvedRecord,
@@ -431,23 +500,26 @@ exports.updateConsumption = async (req, res, next) => {
                 };
             }
 
-            // General update ka log banayein
+            // Step 5: Log the main update action
             await logActivity({
-                userId: approver.id, action: 'CONSUMPTION_UPDATE', ipAddress: req.ip,
-                details: { consumptionId: id, change: { from: originalConsumption.quantity, to: newQuantity } }
+                userId: approver.id,
+                action: 'CONSUMPTION_UPDATE',
+                ipAddress: req.ip,
+                details: { consumptionId: id, change: { from: Number(originalConsumption.quantity), to: newQuantity } }
             });
         });
 
-        // 5. NAYA LOGIC: Transaction ke baad confirmation email bhejein
+        // Step 6: Send confirmation email if an approval was processed
         if (emailPayload) {
             sendApprovalConfirmationEmail(
                 emailPayload.requestor,
                 emailPayload.approvalRecord,
-                emailPayload.itemCode
+                emailPayload.itemCode,
+                approver.name
             ).catch(console.error);
         }
 
-        req.session.flash = { type: 'success', message: 'Consumption record updated and approved successfully.' };
+        req.session.flash = { type: 'success', message: 'Consumption record updated successfully.' };
         res.redirect('/consumption');
 
     } catch (error) {

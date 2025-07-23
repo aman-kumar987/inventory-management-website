@@ -14,7 +14,9 @@ const { isAuthenticated, isApproved } = require('./src/middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.set('trust proxy', 1);
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1); // trust first proxy
+}
 
 // --- 1. VIEW ENGINE & STATIC FILES ---
 app.use(expressLayouts);
@@ -126,6 +128,13 @@ app.get('/dashboard', (req, res) => {
   if (!req.session.user) return res.redirect('/login');
   res.render('dashboard/index', { title: 'Dashboard' });
 });
+
+app.use((req, res, next) => {
+    res.status(404).render('404', { 
+        title: 'Page Not Found' 
+    });
+});
+
 
 // --- 9. ERROR HANDLING (MUST BE LAST) ---
 app.use(errorHandler);

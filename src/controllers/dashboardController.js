@@ -1,21 +1,16 @@
 const { prisma } = require('../config/db');
 
+
 /**
- * @desc Display the main dashboard with new, simplified logic.
+ * @desc Display the main dashboard with statistics cards.
  * @route GET /dashboard
  */
 exports.showDashboard = async (req, res, next) => {
     try {
         const { user } = req.session;
+        const { plantId: plantFilter = 'all', dataType = 'inventory', stockType: stockTypeFilter = 'all' } = req.query;
 
-        // Get filter params
-        const plantFilter = req.query.plantId || 'all';
-        // 'inventory' ya 'consumption'
-        const dataType = req.query.dataType || 'inventory'; 
-        // Naya sub-filter: 'all', 'new', 'oldUsed', 'scrapped'
-        const stockTypeFilter = req.query.stockType || 'all'; 
-
-        // --- Step 1: Accessible Plants ko Determine Karein (Logic wahi hai) ---
+        // Step 1: Determine accessible plants based on user role
         let plantScope = { isDeleted: false };
         if (user.role === 'CLUSTER_MANAGER') {
             plantScope.clusterId = user.clusterId;
@@ -27,15 +22,13 @@ exports.showDashboard = async (req, res, next) => {
         if (user.role !== 'USER' && user.role !== 'VIEWER') {
             accessiblePlants.unshift({ id: 'all', name: 'All Plants' });
         }
-        const accessiblePlantIds = accessiblePlants.map(p => p.id).filter(id => id !== 'all');
 
-        // --- Step 2: Main data fetching logic ---
+        // Step 2: Prepare for data aggregation
         let dataTitle = '';
-        let cardData = [];
+        // THE FIX: Fetch all item groups at the start and create the map
         const itemGroups = await prisma.itemGroup.findMany({ where: { isDeleted: false } });
-        const itemGroupMap = new Map(itemGroups.map(g => [g.id, { name: g.name, value: 0 }]));
+        const itemGroupMap = new Map(itemGroups.map(g => [g.id, { id: g.id, name: g.name, value: 0 }]));
 
-        // Base filter jo dono views mein lagega
         const baseWhere = {
             isDeleted: false,
             item: { isDeleted: false, itemGroup: { isDeleted: false } },
@@ -48,7 +41,7 @@ exports.showDashboard = async (req, res, next) => {
             baseWhere.plantId = user.plantId;
         }
 
-
+        // Step 3: Fetch and process data based on selected data type
         if (dataType === 'inventory') {
             dataTitle = 'Available Inventory';
             if (stockTypeFilter !== 'all') {
@@ -56,69 +49,72 @@ exports.showDashboard = async (req, res, next) => {
             }
 
             if (stockTypeFilter === 'scrapped') {
-                // Scrapped ke liye humein Inventory table se data lena hoga
                 const scrappedData = await prisma.inventory.groupBy({
                     by: ['itemId'],
                     where: baseWhere,
                     _sum: { scrappedQty: true },
                 });
-                const itemIds = scrappedData.map(d => d.itemId);
-                const items = await prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, itemGroupId: true } });
+                const items = await prisma.item.findMany({ where: { id: { in: scrappedData.map(d => d.itemId) } }, select: { id: true, itemGroupId: true } });
                 const itemToGroupMap = new Map(items.map(i => [i.id, i.itemGroupId]));
                 
                 scrappedData.forEach(item => {
                     const groupId = itemToGroupMap.get(item.itemId);
                     if (groupId && itemGroupMap.has(groupId)) {
-                        itemGroupMap.get(groupId).value += item._sum.scrappedQty || 0;
+                        itemGroupMap.get(groupId).value += Number(item._sum.scrappedQty || 0n);
                     }
                 });
-
             } else {
-                // New, OldUsed, ya All ke liye CurrentStock se data lenge
                 const stockData = await prisma.currentStock.findMany({
                     where: baseWhere,
                     include: { item: { select: { itemGroupId: true } } }
                 });
-
                 stockData.forEach(stock => {
                     const group = itemGroupMap.get(stock.item.itemGroupId);
                     if (group) {
-                        if (stockTypeFilter === 'new') {
-                            group.value += stock.newQty;
-                        } else if (stockTypeFilter === 'oldUsed') {
-                            group.value += stock.oldUsedQty;
-                        } else { // 'all'
-                            group.value += stock.newQty + stock.oldUsedQty;
-                        }
+                        if (stockTypeFilter === 'new') group.value += Number(stock.newQty);
+                        else if (stockTypeFilter === 'oldUsed') group.value += Number(stock.oldUsedQty);
+                        else group.value += Number(stock.newQty) + Number(stock.oldUsedQty);
                     }
                 });
             }
-
         } else { // dataType === 'consumption'
             dataTitle = 'Net Consumption';
             const consumptionData = await prisma.consumption.groupBy({
                 by: ['itemId'],
-                where: {
-                    ...baseWhere,
-                    oldAndReceived: false // True consumption
-                },
+                where: { ...baseWhere, oldAndReceived: false },
                 _sum: { quantity: true },
             });
-
-            const itemIds = consumptionData.map(d => d.itemId);
-            const items = await prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, itemGroupId: true } });
+            const items = await prisma.item.findMany({ where: { id: { in: consumptionData.map(d => d.itemId) } }, select: { id: true, itemGroupId: true } });
             const itemToGroupMap = new Map(items.map(i => [i.id, i.itemGroupId]));
 
             consumptionData.forEach(item => {
                 const groupId = itemToGroupMap.get(item.itemId);
                 if (groupId && itemGroupMap.has(groupId)) {
-                    itemGroupMap.get(groupId).value += item._sum.quantity || 0;
+                    itemGroupMap.get(groupId).value += Number(item._sum.quantity || 0n);
                 }
             });
         }
 
-        cardData = Array.from(itemGroupMap.values());
+        const cardData = Array.from(itemGroupMap.values());
+        
+        // Step 4: Calculate Quick Stats for the top cards
+        let totalQuantity = 0;
+        let topGroup = { name: 'N/A', value: -1 };
 
+        cardData.forEach(card => {
+            totalQuantity += card.value;
+            if (card.value > topGroup.value) {
+                topGroup = card;
+            }
+        });
+
+        const quickStats = {
+            totalQuantity,
+            groupCount: cardData.filter(c => c.value > 0).length,
+            topGroupName: topGroup.name
+        };
+
+        // Step 5: Render the view with all necessary data
         res.render('dashboard/index', {
             title: 'Dashboard',
             accessiblePlants,
@@ -128,13 +124,16 @@ exports.showDashboard = async (req, res, next) => {
             dataTitle,
             cardData,
             user,
-            itemGroups // Pass item groups for card links
+            itemGroups, // Pass the full list for linking
+            quickStats 
         });
 
     } catch (error) {
+        console.error('Dashboard Error:', error);
         next(error);
     }
 };
+
 
 
 /**

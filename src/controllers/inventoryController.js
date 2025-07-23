@@ -81,7 +81,7 @@ exports.createInventory = async (req, res, next) => {
 
         await prisma.$transaction(async (tx) => {
             for (const [index, item] of lineItems.entries()) {
-                
+
                 // SAFETY CHECK: Sunishchit karein ki Plant aur Item ID maujood hain
                 if (!item.plantId || !item.itemId) {
                     throw new Error(`Entry #${index + 1} is incomplete. Please ensure a Plant and an Item are selected for every entry.`);
@@ -170,7 +170,13 @@ exports.createInventory = async (req, res, next) => {
                                 where: { id: inventoryLog.id },
                                 include: { item: true, plant: true }
                             });
-                            sendScrapRequestEmail(approver, user, fullInventoryDetails).catch(console.error);
+                            const emailDetails = {
+                                item: fullInventoryDetails.item,
+                                plant: fullInventoryDetails.plant,
+                                requestedQty: scrappedQty,
+                                remarks: sanitize(item.remarks) || ''
+                            };
+                            sendScrapRequestEmail(approver, user, emailDetails).catch(console.error);
                         }
                     }
                 }
@@ -306,10 +312,10 @@ exports.showSummaryView = async (req, res, next) => {
         const { user } = req.session;
         const page = parseInt(req.query.page) || 1;
         const limit = 15;
-        
-        const { 
-            search = '', plantFilter, itemGroupFilter, 
-            newQty, newQtyOp = 'gt', 
+
+        const {
+            search = '', plantFilter, itemGroupFilter,
+            newQty, newQtyOp = 'gt',
             oldQty, oldQtyOp = 'gt',
             consumedQty, consumedQtyOp = 'gt',
             netAvailableQty, netAvailableQtyOp = 'gt'
@@ -321,7 +327,7 @@ exports.showSummaryView = async (req, res, next) => {
             whereClause.AND.push({
                 OR: [
                     { plant: { name: { contains: search, mode: 'insensitive' } } },
-                    { item: { OR: [ { item_code: { contains: search, mode: 'insensitive' } }, { item_description: { contains: search, mode: 'insensitive' } }, { itemGroup: { name: { contains: search, mode: 'insensitive' } } } ]}}
+                    { item: { OR: [{ item_code: { contains: search, mode: 'insensitive' } }, { item_description: { contains: search, mode: 'insensitive' } }, { itemGroup: { name: { contains: search, mode: 'insensitive' } } }] } }
                 ]
             });
         }
@@ -329,7 +335,7 @@ exports.showSummaryView = async (req, res, next) => {
         if (itemGroupFilter) whereClause.AND.push({ item: { itemGroupId: itemGroupFilter } });
         if (newQty) whereClause.AND.push({ newQty: { [newQtyOp === 'et' ? 'equals' : newQtyOp === 'gt' ? 'gte' : 'lte']: parseInt(newQty) } });
         if (oldQty) whereClause.AND.push({ oldUsedQty: { [oldQtyOp === 'et' ? 'equals' : oldQtyOp === 'gt' ? 'gte' : 'lte']: parseInt(oldQty) } });
-        
+
         if (user.role === 'CLUSTER_MANAGER') {
             const plantsInCluster = await prisma.plant.findMany({ where: { clusterId: user.clusterId, isDeleted: false }, select: { id: true } });
             const plantIds = plantsInCluster.map(p => p.id);
@@ -340,8 +346,8 @@ exports.showSummaryView = async (req, res, next) => {
         if (whereClause.AND.length === 0) delete whereClause.AND;
 
         // Step 2: Fetch ALL matching data from the database (no pagination yet)
-        const allLiveStocks = await prisma.currentStock.findMany({ 
-            where: whereClause, 
+        const allLiveStocks = await prisma.currentStock.findMany({
+            where: whereClause,
             include: { item: { include: { itemGroup: true } }, plant: true }
         });
 
@@ -349,8 +355,8 @@ exports.showSummaryView = async (req, res, next) => {
         const stockIds = allLiveStocks.map(s => ({ plantId: s.plantId, itemId: s.itemId }));
         const whereInStock = stockIds.length > 0 ? { OR: stockIds } : { id: '-1' };
         const [groupedScrap, consumptionData] = await Promise.all([
-             prisma.inventory.groupBy({ by: ['plantId', 'itemId'], where: { isDeleted: false, ...whereInStock }, _sum: { scrappedQty: true } }),
-             prisma.consumption.groupBy({ by: ['plantId', 'itemId'], where: { isDeleted: false, oldAndReceived: false, ...whereInStock }, _sum: { quantity: true } })
+            prisma.inventory.groupBy({ by: ['plantId', 'itemId'], where: { isDeleted: false, ...whereInStock }, _sum: { scrappedQty: true } }),
+            prisma.consumption.groupBy({ by: ['plantId', 'itemId'], where: { isDeleted: false, oldAndReceived: false, ...whereInStock }, _sum: { quantity: true } })
         ]);
         const scrapMap = new Map(groupedScrap.map(s => [`${s.plantId}-${s.itemId}`, s._sum.scrappedQty || 0]));
         const consumptionMap = new Map(consumptionData.map(c => [`${c.plantId}-${c.itemId}`, c._sum.quantity || 0]));
@@ -378,11 +384,11 @@ exports.showSummaryView = async (req, res, next) => {
         };
         consolidatedData = applyPostFilter(consolidatedData, consumedQty, consumedQtyOp, 'consumed');
         consolidatedData = applyPostFilter(consolidatedData, netAvailableQty, netAvailableQtyOp, 'netAvailable');
-        
+
         // THE FIX: Paginate the FINAL filtered data
         const totalItems = consolidatedData.length;
         const paginatedData = consolidatedData.slice((page - 1) * limit, page * limit);
-        
+
         const [plants, itemGroups] = await Promise.all([
             prisma.plant.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } }),
             prisma.itemGroup.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } })
@@ -454,7 +460,7 @@ exports.updateInventory = async (req, res, next) => {
         const scrapChange = newScrappedQty - originalScrappedQty;
 
         if (user.role !== 'USER' || (user.role === 'USER' && scrapChange <= 0)) {
-            
+
             await prisma.$transaction(async (tx) => {
                 // THE FIX: Convert original BigInts to Numbers for calculation
                 const newQtyDiff = finalNewQty - Number(originalInventory.newQty);
@@ -729,98 +735,93 @@ exports.exportLedger = async (req, res, next) => {
 exports.exportSummary = async (req, res, next) => {
     try {
         const { user } = req.session;
-        const {
-            search = '',
-            plantFilter,
-            itemGroupFilter
+        
+        // THE FIX: All filter parameters are now read from the request
+        const { 
+            search = '', plantFilter, itemGroupFilter, 
+            newQty, newQtyOp = 'gt', 
+            oldQty, oldQtyOp = 'gt',
+            consumedQty, consumedQtyOp = 'gt',
+            netAvailableQty, netAvailableQtyOp = 'gt'
         } = req.query;
 
-        // --- RE-USE THE EXACT SAME FILTERING LOGIC FROM showSummaryView ---
-        const whereClause = {
-            isDeleted: false,
-            AND: []
-        };
+        // Step 1: Build database-level filters (same as showSummaryView)
+        const whereClause = { isDeleted: false, AND: [] };
         if (search) {
             whereClause.AND.push({
                 OR: [
                     { plant: { name: { contains: search, mode: 'insensitive' } } },
-                    {
-                        item: {
-                            OR: [
-                                { item_code: { contains: search, mode: 'insensitive' } },
-                                { item_description: { contains: search, mode: 'insensitive' } },
-                                { itemGroup: { name: { contains: search, mode: 'insensitive' } } }
-                            ]
-                        }
-                    }
+                    { item: { OR: [ { item_code: { contains: search, mode: 'insensitive' } }, { item_description: { contains: search, mode: 'insensitive' } }, { itemGroup: { name: { contains: search, mode: 'insensitive' } } } ]}}
                 ]
             });
         }
         if (plantFilter) whereClause.AND.push({ plantId: plantFilter });
         if (itemGroupFilter) whereClause.AND.push({ item: { itemGroupId: itemGroupFilter } });
-
+        if (newQty) whereClause.AND.push({ newQty: { [newQtyOp === 'et' ? 'equals' : newQtyOp === 'gt' ? 'gte' : 'lte']: BigInt(newQty) } });
+        if (oldQty) whereClause.AND.push({ oldUsedQty: { [oldQtyOp === 'et' ? 'equals' : oldQtyOp === 'gt' ? 'gte' : 'lte']: BigInt(oldQty) } });
+        
         if (user.role === 'CLUSTER_MANAGER') {
             const plantsInCluster = await prisma.plant.findMany({ where: { clusterId: user.clusterId, isDeleted: false }, select: { id: true } });
             const plantIds = plantsInCluster.map(p => p.id);
-            whereClause.AND.push({ plantId: { in: plantIds.length > 0 ? plantIds : ['non-existent-id'] } });
+            whereClause.AND.push({ plantId: { in: plantIds.length > 0 ? plantIds : ['-1'] } });
         } else if (user.role === 'USER' || user.role === 'VIEWER') {
             whereClause.AND.push({ plantId: { equals: user.plantId } });
         }
         if (whereClause.AND.length === 0) delete whereClause.AND;
 
-        // --- FETCH DATA USING THE CORRECT LOGIC (NO PAGINATION) ---
-        // CHANGE 1: Ab hum live data ke liye CurrentStock se query kar rahe hain
-        const liveStocksToExport = await prisma.currentStock.findMany({
-            where: whereClause,
-            include: {
-                item: { include: { itemGroup: true } },
-                plant: true
-            }
+        // Step 2: Fetch ALL matching data from the database
+        const allLiveStocks = await prisma.currentStock.findMany({ 
+            where: whereClause, 
+            include: { item: { include: { itemGroup: true } }, plant: true }
         });
 
-        if (liveStocksToExport.length === 0) {
+        // Step 3: Calculate the data for every record
+        const stockIds = allLiveStocks.map(s => ({ plantId: s.plantId, itemId: s.itemId }));
+        const whereInStock = stockIds.length > 0 ? { OR: stockIds } : { id: '-1' };
+        const [groupedScrap, consumptionData] = await Promise.all([
+             prisma.inventory.groupBy({ by: ['plantId', 'itemId'], where: { isDeleted: false, ...whereInStock }, _sum: { scrappedQty: true } }),
+             prisma.consumption.groupBy({ by: ['plantId', 'itemId'], where: { isDeleted: false, oldAndReceived: false, ...whereInStock }, _sum: { quantity: true } })
+        ]);
+        const scrapMap = new Map(groupedScrap.map(s => [`${s.plantId}-${s.itemId}`, s._sum.scrappedQty || 0n]));
+        const consumptionMap = new Map(consumptionData.map(c => [`${c.plantId}-${c.itemId}`, c._sum.quantity || 0n]));
+
+        let consolidatedData = allLiveStocks.map(stock => {
+            const newQtyNum = Number(stock.newQty);
+            const oldUsedQtyNum = Number(stock.oldUsedQty);
+            return {
+                plant: stock.plant.name, itemGroup: stock.item.itemGroup.name,
+                itemCode: stock.item.item_code, itemDescription: stock.item.item_description,
+                uom: stock.item.uom, newQty: newQtyNum, oldUsedQty: oldUsedQtyNum,
+                scrappedQty: Number(scrapMap.get(`${stock.plantId}-${stock.itemId}`) || 0n),
+                consumed: Number(consumptionMap.get(`${stock.plantId}-${stock.itemId}`) || 0n),
+                netAvailable: newQtyNum + oldUsedQtyNum
+            };
+        });
+
+        // THE FIX: Apply filters for calculated fields
+        const applyPostFilter = (data, value, operator, field) => {
+            if (!value) return data;
+            const numValue = parseInt(value);
+            if (isNaN(numValue)) return data;
+            return data.filter(item => {
+                if (operator === 'et') return item[field] === numValue;
+                if (operator === 'gt') return item[field] >= numValue;
+                if (operator === 'lt') return item[field] <= numValue;
+                return true;
+            });
+        };
+        consolidatedData = applyPostFilter(consolidatedData, consumedQty, consumedQtyOp, 'consumed');
+        consolidatedData = applyPostFilter(consolidatedData, netAvailableQty, netAvailableQtyOp, 'netAvailable');
+
+        if (consolidatedData.length === 0) {
             req.session.flash = { type: 'info', message: 'No data to export for the selected filters.' };
             return res.redirect('/inventory/summary');
         }
-
-        // CHANGE 2: 'True Consumption' ke liye oldAndReceived: false ka filter lagaya gaya hai
-        const consumptionWhere = {
-            isDeleted: false,
-            plantId: { in: liveStocksToExport.map(s => s.plantId) },
-            itemId: { in: liveStocksToExport.map(s => s.itemId) },
-            oldAndReceived: false
-        };
-        const groupedConsumption = await prisma.consumption.groupBy({
-            by: ['plantId', 'itemId'],
-            where: consumptionWhere,
-            _sum: { quantity: true },
-        });
-        const consumptionMap = new Map(groupedConsumption.map(c => [`${c.plantId}-${c.itemId}`, c._sum.quantity || 0]));
-
-        // --- Format Data for the Excel File ---
-        const dataForSheet = liveStocksToExport.map(stock => {
-            const key = `${stock.plantId}-${stock.itemId}`;
-            const totalConsumed = consumptionMap.get(key) || 0;
-            const netAvailable = stock.newQty + stock.oldUsedQty;
-
-            return {
-                plant: stock.plant.name,
-                itemGroup: stock.item.itemGroup.name,
-                itemCode: stock.item.item_code,
-                itemDescription: stock.item.item_description,
-                uom: stock.item.uom,
-                newQty: stock.newQty,
-                oldUsedQty: stock.oldUsedQty,
-                consumed: totalConsumed,
-                netAvailable: netAvailable
-            };
-        });
 
         // --- CREATE AND STYLE THE EXCEL FILE ---
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Stock Summary');
 
-        // CHANGE 3: Excel columns ko naye data keys (consumed, netAvailable) se match kiya gaya hai
         worksheet.columns = [
             { header: 'Plant', key: 'plant', width: 25 },
             { header: 'Item Group', key: 'itemGroup', width: 20 },
@@ -829,14 +830,15 @@ exports.exportSummary = async (req, res, next) => {
             { header: 'UOM', key: 'uom', width: 10 },
             { header: 'Total New', key: 'newQty', width: 15 },
             { header: 'Total Old/Used', key: 'oldUsedQty', width: 15 },
-            { header: 'Total Consumed (Net)', key: 'consumed', width: 20 },
+            { header: 'Total Scrap', key: 'scrappedQty', width: 15 },
+            { header: 'Consumed (Net)', key: 'consumed', width: 20 },
             { header: 'Net Available Stock', key: 'netAvailable', width: 20, font: { bold: true } },
         ];
 
         const headerRow = worksheet.getRow(1);
         headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A5568' } };
-        worksheet.addRows(dataForSheet);
+        worksheet.addRows(consolidatedData);
 
         // --- SEND THE FILE ---
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -1000,7 +1002,7 @@ exports.syncAndAddInventory = async (req, res, next) => {
                         itemMap.set(row.itemCode.toLowerCase(), item);
                     }
 
-                    const total = row.newQty + row.oldQty + row.scrappedQty;
+                    const totalForLog = row.newQty + row.oldQty + row.scrappedQty;
 
                     // Inventory Record
                     await tx.inventory.create({
@@ -1012,13 +1014,14 @@ exports.syncAndAddInventory = async (req, res, next) => {
                             newQty: row.newQty,
                             oldUsedQty: row.oldQty,
                             scrappedQty: row.scrappedQty,
-                            total,
+                            total: totalForLog,
                             createdBy: user.id
                         }
                     });
 
-                    // Current Stock
-                    if (total > 0) {
+                    // Current Stock (Usable stock only)
+                    const stockToAdd = row.newQty + row.oldQty;
+                    if (stockToAdd > 0) {
                         await tx.currentStock.upsert({
                             where: {
                                 plantId_itemId: {
@@ -1027,12 +1030,14 @@ exports.syncAndAddInventory = async (req, res, next) => {
                                 }
                             },
                             update: {
-                                totalQty: { increment: total }
+                                newQty: { increment: row.newQty },
+                                oldUsedQty: { increment: row.oldQty }
                             },
                             create: {
                                 plantId: plant.id,
                                 itemId: item.id,
-                                totalQty: total
+                                newQty: row.newQty,
+                                oldUsedQty: row.oldQty
                             }
                         });
                     }

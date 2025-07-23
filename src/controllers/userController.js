@@ -8,9 +8,14 @@ const getFormData = () => Promise.all([
     prisma.cluster.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } })
 ]);
 
-// 1. LIST USERS (Updated)
+const getPlantsInCluster = async (clusterId) => {
+    if (!clusterId) return [];
+    return prisma.plant.findMany({ where: { clusterId, isDeleted: false }, orderBy: { name: 'asc' } });
+};
+
 exports.listUsers = async (req, res, next) => {
     try {
+        const { user } = req.session; // The currently logged-in SUPER_ADMIN
         const page = parseInt(req.query.page) || 1;
         const limit = 10;
         const skip = (page - 1) * limit;
@@ -18,17 +23,19 @@ exports.listUsers = async (req, res, next) => {
 
         const whereClause = {
             isDeleted: false,
-            // NAYA BADLAV: Sirf un users ko dikhayein jinka role UNASSIGNED nahi hai
-            role: {
-                not: 'UNASSIGNED'
-            },
-            OR: [
-                { name: { contains: searchTerm, mode: 'insensitive' } },
-                { email: { contains: searchTerm, mode: 'insensitive' } },
-            ],
+            // THE FIX: Exclude the logged-in user from the list
+            id: { not: user.id },
+            role: { not: 'UNASSIGNED' }, // Continue to hide unassigned users
         };
 
-        const [users, totalRecords] = await Promise.all([
+        if (searchTerm) {
+            whereClause.OR = [
+                { name: { contains: searchTerm, mode: 'insensitive' } },
+                { email: { contains: searchTerm, mode: 'insensitive' } },
+            ];
+        }
+
+        const [users, totalRecords, plants, clusters] = await Promise.all([
             prisma.user.findMany({
                 where: whereClause,
                 skip,
@@ -36,12 +43,16 @@ exports.listUsers = async (req, res, next) => {
                 orderBy: { name: 'asc' },
                 include: { plant: true, cluster: true }
             }),
-            prisma.user.count({ where: whereClause })
+            prisma.user.count({ where: whereClause }),
+            prisma.plant.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } }),
+            prisma.cluster.findMany({ where: { isDeleted: false }, orderBy: { name: 'asc' } })
         ]);
         
         res.render('users/index', {
             title: 'User Management',
             users,
+            plants,
+            clusters,
             currentPage: page,
             totalPages: Math.ceil(totalRecords / limit),
             totalItems: totalRecords,
@@ -87,7 +98,7 @@ exports.renderEditForm = async (req, res, next) => {
     }
 };
 
-// 4. CREATE USER (Updated)
+
 exports.createUser = async (req, res, next) => {
     const { name, email, password, role, status, plantId, clusterId } = req.body;
     try {
@@ -114,23 +125,48 @@ exports.createUser = async (req, res, next) => {
     }
 };
 
-// 5. UPDATE USER (Updated)
+/**
+ * @desc    Update an existing user and destroy their active sessions.
+ * @route   POST /users/:id/edit
+ */
 exports.updateUser = async (req, res, next) => {
     const { id } = req.params;
     const { name, email, role, status, plantId, clusterId, password } = req.body;
+    
     try {
+        // ... (validation logic for existing user remains the same)
+        const existingUser = await prisma.user.findFirst({
+            where: { email, isDeleted: false, id: { not: id } }
+        });
+        if (existingUser) {
+            req.session.flash = { type: 'error', message: 'Another user with this email already exists.' };
+            return res.redirect('/users');
+        }
+
         let dataToUpdate = {
-            name, email, role, status,
-            plantId: plantId || null,
+            name, email, role, status, plantId,
             clusterId: clusterId || null,
             updatedBy: req.session.user.id
         };
+
         if (password) {
             dataToUpdate.password = await bcrypt.hash(password, 10);
         }
-        await prisma.user.update({ where: { id }, data: dataToUpdate });
-        await logActivity({ /* ... */ });
-        req.session.flash = { type: 'success', message: 'User updated successfully.' };
+
+        const updatedUser = await prisma.user.update({
+            where: { id },
+            data: dataToUpdate
+        });
+
+        // THE FIX: Using a more robust JSON query to find and destroy sessions
+        await prisma.$queryRaw`DELETE FROM "session" WHERE sess -> 'user' ->> 'id' = ${id}`;
+
+        await logActivity({
+            userId: req.session.user.id, action: 'USER_UPDATE', ipAddress: req.ip,
+            details: { updatedUserId: updatedUser.id, email: updatedUser.email }
+        });
+
+        req.session.flash = { type: 'success', message: 'User updated successfully. Their active sessions have been logged out.' };
         res.redirect('/users');
     } catch (error) {
         next(error);
@@ -167,6 +203,44 @@ exports.softDeleteUser = async (req, res, next) => {
 
         req.session.flash = { type: 'success', message: `User ${deletedUser.name} has been moved to trash.` };
         res.redirect('/users');
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.showMyRequests = async (req, res, next) => {
+    try {
+        const { user } = req.session;
+
+        // Fetch both types of scrap requests initiated by the current user
+        const inventoryScrapRequests = await prisma.scrapApproval.findMany({
+            where: { requestedById: user.id },
+            include: {
+                inventory: { include: { item: true } },
+                approvedBy: { select: { name: true } }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const consumptionScrapRequests = await prisma.consumptionScrapApproval.findMany({
+            where: { requestedById: user.id },
+            include: {
+                consumption: { include: { item: true } },
+                approvedBy: { select: { name: true } }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Add a 'type' to each request and merge them
+        const allRequests = [
+            ...inventoryScrapRequests.map(r => ({ ...r, type: 'Inventory' })),
+            ...consumptionScrapRequests.map(r => ({ ...r, type: 'Consumption' }))
+        ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by most recent
+
+        res.render('users/my-requests', {
+            title: 'My Approval Requests',
+            requests: allRequests,
+        });
     } catch (error) {
         next(error);
     }

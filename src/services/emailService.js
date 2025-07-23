@@ -38,101 +38,95 @@ exports.sendPasswordResetEmail = async (userEmail, resetToken) => {
 };
 
 /**
- * @desc    Sends a scrap approval notification email to a manager.
- * @param {object} approver - The user object of the approver (Cluster Manager).
- * @param {object} requester - The user object of the person who requested.
- * @param {object} inventory - The inventory record related to the request.
+ * @desc    Sends a detailed scrap approval notification to a manager.
  */
-exports.sendScrapRequestEmail = async (approver, requester, inventory) => {
+exports.sendScrapRequestEmail = async (approver, requester, details) => {
     const approvalUrl = `${process.env.BASE_URL}/approvals/scrap`;
-
     const mailOptions = {
         from: `"Inventory App" <no-reply@inventory.com>`,
         to: approver.email,
-        subject: 'New Scrap Request for Approval',
+        subject: `New Scrap Request for ${details.item.item_code}`,
         html: `
-             <div style="font-family: sans-serif; padding: 20px; color: #333;">
-                <h2>Scrap Approval Required</h2>
+            <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 8px; max-width: 600px; margin: auto;">
+                <h2 style="color: #4f46e5; border-bottom: 2px solid #ddd; padding-bottom: 10px;">Scrap Approval Required</h2>
                 <p>Hello ${approver.name},</p>
                 <p>A new scrap request has been submitted by <strong>${requester.name}</strong> and requires your approval.</p>
-                <h3>Details:</h3>
-                <ul>
-                    <li><strong>Item:</strong> ${inventory.item.item_code}</li>
-                    <li><strong>Plant:</strong> ${inventory.plant.name}</li>
-                    <li><strong>Reservation No:</strong> ${inventory.reservationNumber}</li>
-                </ul>
-                <p style="margin: 25px 0;">
-                    <a href="${approvalUrl}" style="background-color: #4f46e5; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px;">
-                        View Pending Approvals
-                    </a>
+                <h3 style="color: #333;">Details:</h3>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Item Code:</strong></td><td style="padding: 8px;">${details.item.item_code}</td></tr>
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Description:</strong></td><td style="padding: 8px;">${details.item.item_description}</td></tr>
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Plant:</strong></td><td style="padding: 8px;">${details.plant.name}</td></tr>
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Requested Qty:</strong></td><td style="padding: 8px; font-weight: bold; color: #c00;">${details.requestedQty}</td></tr>
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Remarks:</strong></td><td style="padding: 8px;">${details.remarks || 'N/A'}</td></tr>
+                </table>
+                <p style="text-align: center; margin: 25px 0;">
+                    <a href="${approvalUrl}" style="background-color: #4f46e5; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px;">View Pending Approvals</a>
                 </p>
             </div>
         `,
     };
-
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Scrap approval email sent to manager: ${approver.email}`);
     } catch (error) {
         console.error('Error sending scrap approval email:', error);
     }
 };
 
 /**
- * @desc    NEW: Sends an email to the original requester informing them their request was approved.
- * @param {object} requestor - The user who made the request.
- * @param {object} approval - The scrap approval record (ScrapApproval or ConsumptionScrapApproval).
- * @param {string} itemCode - The item code related to the approval.
+ * @desc    Sends an email to the requester about their approved request.
  */
-exports.sendApprovalConfirmationEmail = async (requestor, approval, itemCode) => {
+exports.sendApprovalConfirmationEmail = async (requestor, approval, itemCode, approverName) => {
     const mailOptions = {
         from: `"Inventory App" <no-reply@inventory.com>`,
         to: requestor.email,
-        subject: `✅ Your Scrap Request has been Approved`,
+        subject: `✅ Approved: Your Scrap Request for ${itemCode}`,
         html: `
-            <div style="font-family: sans-serif; padding: 20px; color: #333;">
-                <h2>Request Approved</h2>
+            <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 8px; max-width: 600px; margin: auto;">
+                <h2 style="color: #16a34a; border-bottom: 2px solid #ddd; padding-bottom: 10px;">Request Approved</h2>
                 <p>Hello ${requestor.name},</p>
-                <p>Good news! Your scrap request for item <strong>${itemCode}</strong> with a quantity of <strong>${approval.requestedQty}</strong> has been approved.</p>
-                <p>The stock has been updated accordingly.</p>
+                <p>Good news! Your scrap request has been approved.</p>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Item Code:</strong></td><td style="padding: 8px;">${itemCode}</td></tr>
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Approved Qty:</strong></td><td style="padding: 8px; font-weight: bold;">${approval.requestedQty}</td></tr>
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Approved By:</strong></td><td style="padding: 8px;">${approverName}</td></tr>
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Date Processed:</strong></td><td style="padding: 8px;">${new Date(approval.processedAt).toLocaleString('en-IN')}</td></tr>
+                </table>
                 <p>Thank you.</p>
             </div>
         `,
     };
-
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Approval confirmation email sent to: ${requestor.email}`);
     } catch (error) {
         console.error('Error sending approval confirmation email:', error);
     }
 };
 
 /**
- * @desc    NEW: Sends an email to the original requester informing them their request was rejected.
- * @param {object} requestor - The user who made the request.
- * @param {object} approval - The scrap approval record (ScrapApproval or ConsumptionScrapApproval).
- * @param {string} itemCode - The item code related to the approval.
+ * @desc    Sends an email to the requester about their rejected request.
  */
-exports.sendRejectionEmail = async (requestor, approval, itemCode) => {
+exports.sendRejectionEmail = async (requestor, approval, itemCode, approverName) => {
     const mailOptions = {
         from: `"Inventory App" <no-reply@inventory.com>`,
         to: requestor.email,
-        subject: `❌ Your Scrap Request has been Rejected`,
+        subject: `❌ Rejected: Your Scrap Request for ${itemCode}`,
         html: `
-            <div style="font-family: sans-serif; padding: 20px; color: #333;">
-                <h2>Request Rejected</h2>
+            <div style="font-family: sans-serif; padding: 20px; color: #333; border: 1px solid #ddd; border-radius: 8px; max-width: 600px; margin: auto;">
+                <h2 style="color: #dc2626; border-bottom: 2px solid #ddd; padding-bottom: 10px;">Request Rejected</h2>
                 <p>Hello ${requestor.name},</p>
-                <p>Unfortunately, your scrap request for item <strong>${itemCode}</strong> with a quantity of <strong>${approval.requestedQty}</strong> has been rejected.</p>
-                <p>No changes have been made to the stock.</p>
+                <p>Unfortunately, your scrap request has been rejected.</p>
+                 <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Item Code:</strong></td><td style="padding: 8px;">${itemCode}</td></tr>
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Requested Qty:</strong></td><td style="padding: 8px; font-weight: bold;">${approval.requestedQty}</td></tr>
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Rejected By:</strong></td><td style="padding: 8px;">${approverName}</td></tr>
+                    <tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; color: #555;"><strong>Date Processed:</strong></td><td style="padding: 8px;">${new Date(approval.processedAt).toLocaleString('en-IN')}</td></tr>
+                </table>
                 <p>If you have any questions, please contact your manager.</p>
             </div>
         `,
     };
-
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Rejection notification email sent to: ${requestor.email}`);
     } catch (error) {
         console.error('Error sending rejection email:', error);
     }

@@ -15,31 +15,26 @@ const getPlantsInCluster = async (clusterId) => {
 exports.listUsers = async (req, res, next) => {
     try {
         const { user: manager } = req.session;
-        let editUser = null;
-        if (req.query.edit) {
-            editUser = await prisma.user.findFirst({
-                where: { id: req.query.edit, clusterId: manager.clusterId } // Ensure they can only edit users in their cluster
-            });
-        }
 
         const plantsInCluster = await getPlantsInCluster(manager.clusterId);
-        const plantIds = plantsInCluster.map(p => p.id);
-
+        
         const usersInCluster = await prisma.user.findMany({
             where: {
-                plantId: { in: plantIds.length > 0 ? plantIds : ['non-existent-id'] },
-                isDeleted: false
+                isDeleted: false,
+                clusterId: manager.clusterId,
+                role: { in: ['USER', 'VIEWER'] }
             },
-            include: { plant: true }
+            include: { plant: true },
+            orderBy: { name: 'asc' }
         });
 
-        res.render('cluster/users', { // A new view file
+        res.render('cluster/users', {
             title: 'Manage Cluster Users',
             users: usersInCluster,
-            plants: plantsInCluster, // Pass only their plants to the form
-            editUser
+            plants: plantsInCluster,
+            editUser: null 
         });
-    } catch (error) {
+    } catch (error) { // THE FIX: Added the missing curly braces
         next(error);
     }
 };
@@ -91,7 +86,7 @@ exports.createUser = async (req, res, next) => {
 };
 
 /**
- * @desc    Update a user within the manager's cluster.
+ * @desc    Update a user within the manager's cluster and destroy their active sessions.
  * @route   POST /cluster/users/:id/edit
  */
 exports.updateUser = async (req, res, next) => {
@@ -100,7 +95,7 @@ exports.updateUser = async (req, res, next) => {
     const { user: manager } = req.session;
 
     try {
-        // --- SECURITY CHECKS ---
+        // ... (security checks remain the same)
         const userToUpdate = await prisma.user.findUnique({ where: { id } });
         if (!userToUpdate || userToUpdate.clusterId !== manager.clusterId) {
             req.session.flash = { type: 'error', message: 'You can only edit users within your own cluster.' };
@@ -118,12 +113,15 @@ exports.updateUser = async (req, res, next) => {
 
         await prisma.user.update({ where: { id }, data: dataToUpdate });
 
+        // THE FIX: Using a more robust JSON query to find and destroy sessions
+        await prisma.$queryRaw`DELETE FROM "session" WHERE sess -> 'user' ->> 'id' = ${id}`;
+
         await logActivity({
             userId: manager.id, action: 'USER_UPDATE_BY_MANAGER', ipAddress: req.ip,
             details: { updatedUserId: id, email: email }
         });
 
-        req.session.flash = { type: 'success', message: 'User updated successfully.' };
+        req.session.flash = { type: 'success', message: 'User updated successfully. Their active sessions have been logged out.' };
         res.redirect('/cluster/users');
     } catch (error) {
         next(error);
